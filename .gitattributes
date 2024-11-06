@@ -1,0 +1,23 @@
+# Line-ending policy. Everything checks out as LF on every platform, so a
+# Windows clone cannot rewrite text files to CRLF. This repository depends on
+# exact bytes more than most: a certificate is bound to the hash of the
+# original problem file, the tamper corpus and hand-worked verifier vectors are
+# compared verbatim, and the determinism gate compares two runs of the same
+# trace with `cmp`. A CRLF rewrite breaks those comparisons for a reason that
+# is slow to diagnose.
+* text=auto eol=lf
+
+# Instance and certificate fixtures are hashed as-is. Never normalize them.
+*.mps -text
+*.lp -text
+*.hcc -text
+
+# Binary — never convert
+*.gif binary
+*.png binary
+*.ico binary
+*.woff2 binary
+*.wasm binary
+*.pdf binary
+*.zip binary
+*.gz binary

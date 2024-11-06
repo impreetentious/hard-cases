@@ -1,0 +1,17 @@
+/target/
+.DS_Store
+*.log
+theater/node_modules/
+theater/dist/
+/artifacts/
+/out/
+
+# Fetched instance archives. The fetch scripts and their hashes are tracked;
+# the downloaded models never are.
+/instances/netlib/
+/instances/miplib/
+
+# Solver output
+*.hcc
+!tamper/**/*.hcc
+!verifier-vectors/**/*.hcc
