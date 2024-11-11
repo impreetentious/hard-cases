@@ -19,7 +19,7 @@ cover of the branch tree — which `hc-verify` then checks by reparsing the
 proof rules. It shares no executable code with the solver, has no dependencies
 at all, and its trust boundary is published rather than described as magic. What
 that boundary does and does not include is spelled out in
-limitations.
+[limitations](docs/LIMITATIONS.md).
 
 The situation room mid-solve: the tree growing, bound and incumbent strips converging, then a tampered certificate field rejected with the exact failing inequality highlighted.
 
@@ -83,14 +83,17 @@ this solver, and work is budgeted in deterministic effort units — simplex
 iterations and node counts — never in seconds. Supported targets are Linux
 x86_64, macOS arm64, and WebAssembly; Windows is not a supported CI target. A
 false terminal claim is a severity-zero defect. See
-limitations before interpreting any result.
+[limitations](docs/LIMITATIONS.md) before interpreting any result.
 
 ## Going deeper
 
 The write-ups are the point of the project — each one names a failure mode and
 shows the machinery that catches it.
 
+- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this does and does not
   prove; read it before interpreting any result
+- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this kernel will not claim
+- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — the verifier's trust boundary
   source hash, and the words "independent" is and is not doing here
 - [`docs/formats.md`](docs/formats.md) — the certificate grammar, the accepted
   MPS and LP subsets, and the JSON schema, generated from the inert assets
@@ -119,4 +122,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.0.1
+**Version:** v0.0.2

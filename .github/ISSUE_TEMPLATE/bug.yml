@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible correctness or tooling problem.
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the command, the seed, and the smallest model and certificate that show the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and observed behavior
+      description: State whether the solver returned a wrong status or value, the verifier rejected a sound proof, or the verifier accepted an unsound one.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Build or commit
+    validations:
+      required: true

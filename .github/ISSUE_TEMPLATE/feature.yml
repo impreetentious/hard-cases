@@ -1,0 +1,19 @@
+name: Feature request
+description: Propose a scoped improvement to the solver, the verifier, or the situation room.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and teaching value
+      description: What solver behavior, proof gap, or reader need does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Proposed design
+      description: Mention determinism, what the certificate must carry, verifier impact and independence, tests, and any needed ADR.
+    validations:
+      required: true
