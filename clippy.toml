@@ -1,0 +1,10 @@
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "solver iteration must be ordered; use BTreeMap or Vec" },
+    { path = "std::collections::HashSet", reason = "solver iteration must be ordered; use BTreeSet or Vec" },
+    { path = "std::time::SystemTime", reason = "effort is counted in iterations and nodes, never timed" },
+    { path = "std::time::Instant", reason = "effort is counted in iterations and nodes, never timed" },
+]
+
+disallowed-methods = [
+    { path = "f64::mul_add", reason = "fused multiply-add differs between native and wasm targets" },
+]

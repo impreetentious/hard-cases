@@ -114,7 +114,7 @@ versioned decision record.
 
 ## License
 
-Copyright (c) 2024 Sidakpreet Singh.
+Copyright (c) 2024-2025 Sidakpreet Singh.
 
 Hard Cases is released under the MIT License — solvers are infrastructure, and
 embedding is the point. The complete license text is in [LICENSE](LICENSE); the
@@ -122,4 +122,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.0.2
+**Version:** v0.0.3
