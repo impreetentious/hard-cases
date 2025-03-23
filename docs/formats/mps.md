@@ -1,0 +1,210 @@
+<!--
+  Generated from spec/v1 by scripts/gen-docs.mjs. Do not edit.
+  The assets are the specification; this page is a rendering of them.
+-->
+# MPS acceptance v1
+
+Accepted sections, bound types, the RANGES table, and the fixed-form field windows.
+
+## `[variants]`
+
+- **fixed** — Fields are read from the column windows in fields below. Names may contain spaces because their extent is positional.
+- **free** — Fields are whitespace-delimited. A name may not contain whitespace, and a line with more fields than the record accepts is rejected rather than truncated.
+- **selection** — The variant is chosen by the caller, not sniffed from the content. Sniffing would make the format tag, and therefore the instance digest, depend on a heuristic.
+
+## `[fields]`
+
+- **note** — A record line begins with at least one blank. A line whose first character is not blank starts a section.
+- **field_1** — columns 2 to 3, the indicator, for example the row sense in ROWS or the bound type in BOUNDS
+- **field_2** — columns 5 to 12, the first name
+- **field_3** — columns 15 to 22, the second name
+- **field_4** — columns 25 to 36, the first value
+- **field_5** — columns 40 to 47, the third name
+- **field_6** — columns 50 to 61, the second value
+- **overlong** — A field whose content runs past its window is rejected. Silently accepting an overlong name is how a file that means one thing in one reader means another thing in the next.
+- **comments** — A line whose first character is an asterisk is a comment and is ignored. A blank line is ignored.
+
+## `[sections]`
+
+- **accepted** —
+  - NAME
+  - OBJSENSE
+  - ROWS
+  - COLUMNS
+  - RHS
+  - RANGES
+  - BOUNDS
+  - ENDATA
+- **required** —
+  - ROWS
+  - COLUMNS
+  - ENDATA
+- **order** — NAME and OBJSENSE, in either order, precede ROWS. ROWS precedes COLUMNS. RHS, RANGES, and BOUNDS follow COLUMNS in that relative order. A section appearing twice is rejected.
+- **unknown** — Any other section header is rejected, including the widely seen OBJSENSE spelled as a record inside another section, QUADOBJ, SOS, and INDICATORS. Their absence is a stated non-goal, not an oversight.
+- **trailing** — Content after ENDATA is ignored for parsing but is inside the digest, so it can never be used to smuggle in a second model.
+
+## `[section.objsense]`
+
+- **forms** — Either the header OBJSENSE followed by a record line naming the sense, or, in free form only, the header line OBJSENSE followed on the same line by the sense.
+- **values** —
+  - MAX
+  - MAXIMIZE
+  - MIN
+  - MINIMIZE
+- **effect** — MAX negates every objective coefficient and the objective constant at the parse boundary, per canonical.toml.
+
+## `[section.rows]`
+
+- **senses** —
+  - N
+  - L
+  - G
+  - E
+- **objective** — The first N row in ROWS order is the objective. Every later N row is discarded and is recorded on a discarded line of the canonical dump.
+- **no_objective** — A file with no N row is rejected. There is no defensible default objective, and a zero objective would turn an optimality question into a feasibility question without saying so.
+
+## `[section.columns]`
+
+- **markers** — INTORG and INTEND marker records switch integrality for the columns declared between them. A marker record carries an arbitrary label in field 2, the literal MARKER in field 3, and the literal INTORG or INTEND in field 5. Each of the two literals may be surrounded by apostrophes, which are stripped; anything else in those positions is not a marker record and is read as an ordinary entry. An unbalanced or nested marker pair is rejected.
+- **entries** — Each record supplies one or two row-name and value pairs for the named column. An entry naming the objective row supplies the objective coefficient.
+- **grouping** — Records for one column must be contiguous. A column reappearing after another column has started is rejected, because the two readings, resume or restart, are both defensible and produce different matrices.
+- **unknown_row** — An entry naming a row that ROWS did not declare is rejected.
+
+## `[section.rhs]`
+
+- **effect** — Supplies the right-hand side for the named row. An entry naming the objective row supplies the objective constant per canonical.toml.
+- **default** — A row with no RHS entry has right-hand side zero.
+
+## `[section.ranges]`
+
+- **effect** — Supplies the range for the named row per the ranges table below. An entry naming the objective row or an N row is rejected.
+
+## `[section.bounds]`
+
+- **effect** — Supplies bounds for the named column per the bound table below. An entry naming a column COLUMNS did not declare is rejected.
+- **repeats** — Two BOUNDS entries of the same type on the same column under the same vector name are rejected; two entries of different types, for example LO then UP, are the normal way to give both sides.
+
+## `[vectors]`
+
+- **rule** — Version 1 accepts at most one distinct RHS vector name, at most one distinct RANGES vector name, and at most one distinct BOUNDS vector name. Repeated records under that one name are ordinary and expected.
+- **multiple** — A second distinct name within a section is rejected with the identifier for multiple named vectors, rather than resolved by taking the first.
+- **trap** — trap_mps_multiple_vectors
+
+## `[ranges]`
+
+- **rule** — Let b be the row right-hand side and R the range value for that row. The resulting exact row bounds are as tabulated. The value |R| denotes the exact absolute value of R.
+- **trap** — trap_free_mps_ranges
+
+## `[ranges.row.g]`
+
+- **sense** — G
+- **sign** — any
+- **lower** — b
+- **upper** — b + |R|
+
+## `[ranges.row.l]`
+
+- **sense** — L
+- **sign** — any
+- **lower** — b - |R|
+- **upper** — b
+
+## `[ranges.row.e_positive]`
+
+- **sense** — E
+- **sign** — R > 0
+- **lower** — b
+- **upper** — b + R
+
+## `[ranges.row.e_negative]`
+
+- **sense** — E
+- **sign** — R < 0
+- **lower** — b + R
+- **upper** — b
+
+## `[ranges.row.e_zero]`
+
+- **sense** — E
+- **sign** — R = 0
+- **lower** — b
+- **upper** — b
+- **note** — A zero range on an equality row is a no-op rather than an error. It says nothing and is permitted to say nothing.
+
+## `[bounds]`
+
+- **accepted** —
+  - LO
+  - UP
+  - FX
+  - FR
+  - MI
+  - PL
+  - BV
+  - LI
+  - UI
+- **rejected** —
+  - SC
+  - SI
+- **unknown** — Any bound type outside the accepted list is rejected, including the two named above. Semicontinuous variables are a stated non-goal and there is no honest way to approximate one.
+- **trap** — trap_mps_unsupported_bound_type
+- **defaults** — A column with no BOUNDS entry has lower bound 0 and no upper bound, whether or not it is integer.
+- **integer_default** — The alternative convention giving an unbounded integer column an implicit upper bound of 1 is rejected. It silently converts a general integer model into a binary one, and files relying on it are wrong under this reader rather than differently interpreted.
+
+## `[bounds.type.lo]`
+
+- **code** — LO
+- **effect** — Sets the lower bound to the value.
+- **integrality** — unchanged
+
+## `[bounds.type.up]`
+
+- **code** — UP
+- **effect** — Sets the upper bound to the value.
+- **integrality** — unchanged
+- **negative** — A negative value on a column whose lower bound is still the default zero is rejected in strict mode. Readers disagree about whether this implies a lower bound of negative infinity, and they disagree about whether it does so only for integer columns; both readings are common and they produce different models. The lenient mode applies the negative-infinity reading and labels the parse, and a lenient parse cannot carry a certificate unless the verifier strict parser accepts the same bytes independently.
+
+## `[bounds.type.fx]`
+
+- **code** — FX
+- **effect** — Sets both bounds to the value.
+- **integrality** — unchanged
+
+## `[bounds.type.fr]`
+
+- **code** — FR
+- **effect** — Removes both bounds. The value field is ignored and must be absent or empty.
+- **integrality** — unchanged
+
+## `[bounds.type.mi]`
+
+- **code** — MI
+- **effect** — Removes the lower bound. The upper bound is untouched.
+- **integrality** — unchanged
+- **rejected_reading** — The historical reading that also sets the upper bound to zero is rejected. It has no modern users and turns an unbounded-below variable into a nonpositive one.
+
+## `[bounds.type.pl]`
+
+- **code** — PL
+- **effect** — Removes the upper bound, which is the default state. The value field is ignored and must be absent or empty.
+- **integrality** — unchanged
+
+## `[bounds.type.bv]`
+
+- **code** — BV
+- **effect** — Sets the bounds to 0 and 1 and marks the column integer, whether or not it appeared between INTORG and INTEND. The value field is ignored and must be absent or empty.
+- **integrality** — set to integer
+
+## `[bounds.type.li]`
+
+- **code** — LI
+- **effect** — Sets the lower bound to the value, which must be an exact integer, and marks the column integer.
+- **integrality** — set to integer
+- **noninteger** — A non-integral value is rejected rather than rounded. Rounding here would change the feasible set without appearing in any transform record.
+
+## `[bounds.type.ui]`
+
+- **code** — UI
+- **effect** — Sets the upper bound to the value, which must be an exact integer, and marks the column integer.
+- **integrality** — set to integer
+- **noninteger** — A non-integral value is rejected, for the reason given for LI.

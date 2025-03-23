@@ -9,14 +9,16 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-echo "[1/5] version coherence"
+echo "[1/6] version coherence"
 node "$repo_root/scripts/check-version-coherence.mjs"
-echo "[2/5] cargo fmt"
+echo "[2/6] normative assets and generated docs"
+node "$repo_root/scripts/gen-docs.mjs" --check
+echo "[3/6] cargo fmt"
 cargo fmt --all -- --check
-echo "[3/5] cargo clippy"
+echo "[4/6] cargo clippy"
 cargo clippy --workspace --all-targets -- -D warnings
-echo "[4/5] forbidden API scan and verifier isolation"
+echo "[5/6] forbidden API scan and verifier isolation"
 "$repo_root/scripts/ci/forbidden-grep.sh"
-echo "[5/5] tests"
+echo "[6/6] tests"
 cargo test --workspace --all-targets
 echo "preflight: PASS"

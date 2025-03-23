@@ -1,0 +1,161 @@
+<!--
+  Generated from spec/v1 by scripts/gen-docs.mjs. Do not edit.
+  The assets are the specification; this page is a rendering of them.
+-->
+# Numeric acceptance, caps, and budgets v1
+
+The acceptance fence every strict parser applies before allocating, and the absolute size, bit, and work caps a proof must fit inside.
+
+## `[fence]`
+
+- **order** — Token length, then projected bit length computed from the token without constructing the value, then construction, then the binary64 round-trip check. A check that runs after the allocation it was meant to prevent is decoration.
+- **trap_exponent** — trap_numeric_exponent_cap
+- **trap_alloc** — trap_verify_caps_before_alloc
+
+## `[fence.token_length]`
+
+- **limit_bytes** — 4096
+- **rule** — A numeric token longer than the limit is rejected before it is examined further.
+
+## `[fence.projected_bits]`
+
+- **limit_bits** — 1048576
+- **rule** — From the token alone, bound the bit length of the reduced numerator and denominator: the digit count gives a bound on the mantissa magnitude and the exponent shifts it by a factor of ten per unit. If either bound exceeds the limit, reject. The bound need not be tight; it must be sound and must be computed in machine integers.
+- **note** — One mebibit, which is the 2^20 bit cap that also governs rationals appearing anywhere in a proof.
+
+## `[fence.binary64_roundtrip]`
+
+- **rule** — Every exact nonzero model value, whether a coefficient, a bound, a right-hand side, or an objective entry, must round to a nonzero finite binary64. A value that underflows to zero or overflows to infinity in the working copy is rejected.
+- **reason** — The float search would silently work on a different model than the one being proved about. Rejecting is honest; solving a model the certificate does not describe is not.
+- **zero_exempt** — An exact zero is exempt from the nonzero requirement, since it is representable and means what it says.
+
+## `[fence.parser]`
+
+- **file_bytes** — 268435456
+- **nonzeros** — 10000000
+- **name_bytes** — 255
+- **rule** — Cap checks precede every reserve or allocation sized by input. A declared count in a header is a claim by the input, never an allocation instruction.
+
+## `[caps.hcc]`
+
+- **netlib_bytes** — 268435456
+- **miplib_bytes** — 1073741824
+- **records** — 20000000
+- **tree_depth** — 100000
+- **rational_bits** — 1048576
+- **theater_bytes** — 33554432
+- **theater_nodes** — 100000
+- **rational_token_bytes** — 262144
+- **rule** — A certificate exceeding any cap does not receive a proof-bearing or point-bearing status. The observed value and the limit are both reported.
+- **never_normalized** — A cap is never expressed as a ratio against solve effort. Reporting that verification cost a tenth of the solve invites the reading that a longer solve earns a longer proof, which is exactly backwards.
+- **depth_note** — The depth cap is large enough that a legal proof can exceed the process call stack, which is why parsing and replay are iterative with an explicit bounded stack rather than recursive.
+- **trap_depth** — trap_deep_tree_iterative
+
+## `[caps.work]`
+
+- **verifier_unit** — VWU
+- **definition** — One verifier work unit per parsed byte, and one per primitive limb-word operation: add, subtract, compare, shift, multiply, and each inner step of a division. The counter is incremented centrally inside the arithmetic and parser primitives, never by callers, so a new call site cannot forget to pay.
+- **netlib_limit** — 100000000000
+- **miplib_limit** — 1000000000000
+- **separate** — Verifier work units and solver effort are different currencies and are never combined into one number. The solver counts iterations, nodes, and cut rounds; the verifier counts bytes and limb operations.
+- **wall_clock** — Wall time and peak memory are disclosed as operational measurements. They gate nothing and are never normalized into a ratio.
+
+## `[caps.tcb]`
+
+- **verifier_loc** — 20000
+- **rule** — Nonblank, non-test Rust lines in the verifier crate. Exceeding this requires an ADR, an audit note, and an updated release receipt.
+- **dependencies** — 0
+- **unsafe_blocks** — 0
+- **ffi** — 0
+
+## `[tolerances]`
+
+- **feasibility** — 1e-6
+- **integrality** — 1e-6
+- **optimality** — 1e-9
+- **pivot** — 1e-7
+- **zero_drop** — 1e-11
+- **home** — hc-core::tol is the only module permitted to contain these literals. Every other site names the constant.
+
+## `[constants.scaling]`
+
+- **geometric_iterations** — 10
+- **convergence** — 1e-2
+
+## `[constants.factorization]`
+
+- **refactor_every** — 100
+- **drift_trigger** — Immediate refactorization when the residual infinity norm exceeds one tenth of the feasibility tolerance.
+- **trap** — trap_lu_drift_refactor
+
+## `[constants.degeneracy]`
+
+- **stall_iterations** — 200
+- **perturbation** — Ten times the feasibility tolerance, times one plus the absolute bound, times a seeded uniform draw.
+- **bland_after** — 2
+- **note** — The perturbation is removed and the unperturbed model re-solved before any terminal claim, so an inference never cites a bound the author did not write.
+- **trap** — trap_perturbation_removed
+
+## `[constants.arithmetic]`
+
+- **karatsuba_threshold_limbs** — 32
+
+## `[constants.branching]`
+
+- **reliability_k** — 4
+- **strong_candidates** — 8
+- **strong_iterations** — 100
+- **plunge_depth** — 32
+- **basis_cache** — 256
+- **eviction** — least recently used
+
+## `[constants.cuts]`
+
+- **root_rounds** — 8
+- **cut_depth** — 4
+- **per_round_accepted** — 50
+- **violation_min** — 1e-4
+- **parallelism_max** — 0.99
+- **pool_per_ancestry** — 10000
+- **age_evict_rounds** — 32
+- **promotion** — A local scope is never promoted. Not on aging, not on repeated rediscovery, not when a sibling would benefit.
+
+## `[constants.cover_dp]`
+
+- **vars** — 64
+- **capacity** — 4096
+- **states** — 1000000
+- **outside_caps** — When a cap would be exceeded the certificate may carry only the unlifted cover cut. Partial lifting is not permitted, because a partially applied dynamic program is a different theorem.
+
+## `[constants.heuristics]`
+
+- **rounding** — always
+- **diving_lp_iterations** — 500
+- **pump_iterations** — 200
+- **pump_restart_flips** — 8
+
+## `[constants.effort]`
+
+- **lp_iterations** — 1000000
+- **mip_nodes** — 1000000
+- **mip_lp_iterations** — 100000000
+
+## `[constants.campaigns]`
+
+- **per_pr_instances** — 2000
+- **per_pr_domain_product** — 4096
+- **nightly_instances** — 100000
+- **nightly_domain_product** — 1048576
+- **oracle_cap** — 1048576
+- **note** — The domain product is the number of integer assignments enumerated exhaustively. In the binary-only case the per-change bound is twelve binaries and the nightly bound is twenty.
+
+## `[constants.theater]`
+
+- **js_css_gzip_bytes** — 358400
+- **solver_wasm_gzip_bytes** — 2621440
+- **verifier_wasm_gzip_bytes** — 1572864
+- **live_nodes** — 100000
+
+## `[constants.tiebreak]`
+
+- **final** — Lowest index wins. Every decision rule ends here, so no ordering ever depends on which of two equal candidates was encountered first.

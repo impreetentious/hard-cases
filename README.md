@@ -95,7 +95,7 @@ shows the machinery that catches it.
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this kernel will not claim
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — the verifier's trust boundary
   source hash, and the words "independent" is and is not doing here
-- [`docs/formats.md`](docs/formats.md) — the certificate grammar, the accepted
+- [`docs/formats/`](docs/formats/) — the certificate grammar, the accepted
   MPS and LP subsets, and the JSON schema, generated from the inert assets
 - [`docs/case-files/`](docs/case-files/) — real bugs, minimized, with the
   instance and certificate that exposed them
@@ -122,4 +122,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.1.0
+**Version:** v0.1.1
