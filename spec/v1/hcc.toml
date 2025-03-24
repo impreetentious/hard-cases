@@ -1,0 +1,229 @@
+# HCC certificate format and proof calculus, version 1.
+#
+# A certificate is a sequence of records that a reader with no access to the
+# solver can replay against the original file. The calculus has four inference
+# rules and eight transform rules, and that is the entire list. There is no rule
+# meaning trust this bound, no rule that rounds, no user axiom, and no plugin
+# point. A proof system with an extension mechanism is a proof system with a
+# hole in it.
+
+[meta]
+version = 1
+title = 'HCC certificate format and proof calculus v1'
+summary = 'The certificate encoding, the closed record kinds and their order, and the four inference rules.'
+
+# ---------------------------------------------------------------------------
+# Encoding
+# ---------------------------------------------------------------------------
+
+[encoding]
+magic = 'HCC1'
+integers = 'Fixed-width header fields are little-endian. Record lengths and payload counts are unsigned LEB128, and a LEB128 value that does not fit in 64 bits, or that is encoded with more bytes than its value needs, is rejected: a non-minimal encoding is a second spelling of the same number and two spellings mean two byte streams for one proof.'
+rationals = 'Canonical rational text as defined in canonical.toml, encoded as UTF-8 and prefixed by its LEB128 byte length.'
+identifiers = 'Record identifiers are u64, strictly increasing in record order, starting at 0. A record may cite only identifiers strictly less than its own.'
+arrays = 'A LEB128 count followed by that many elements. Where the semantics are a set, the elements are sorted ascending by their first field and a repeat or an out-of-order element is rejected.'
+unknown = 'An unknown record type, an unknown claim kind, or a trailing field inside a record payload is rejected. Proof data has no forward-compatible ignore rule.'
+allocation = 'Every declared count and length is checked against the caps in numeric.toml before any reservation sized by it.'
+iterative = 'Parsing and tree replay use an explicit stack bounded by the declared depth and the hard depth cap. Neither is recursive, because a legal proof may be deeper than the process call stack.'
+
+[header]
+layout = 'magic, then hcc_version and canonicalization_version as u16, then format_tag as u8, then instance_byte_length as u64, then the 32-byte instance digest, then claim_kind as u8, then declared_record_count and declared_byte_length as u64.'
+hcc_version = 1
+canonicalization_version = 1
+binding = 'The verifier recomputes the digest from the instance file it was given and compares. A mismatch rejects before any record is read, so a proof cannot be quietly reattached to a different model.'
+declared = 'The declared counts are claims by the input, checked against the caps and then against what the stream actually contains. They are never used to size an allocation directly.'
+
+[crc]
+algorithm = 'CRC-32C, the Castagnoli polynomial, reflected, polynomial constant 0x82f63b78, initial value 0xffffffff, final exclusive-or 0xffffffff.'
+coverage = 'Every byte from the first byte of the magic through the last byte of the End record payload preceding the checksum field, excluding only the four checksum bytes themselves.'
+role = 'Transport corruption detection. It is not part of the proof and a correct checksum establishes nothing about the mathematics. It is checked first only because a truncated file should be diagnosed as truncated rather than as an invalid inference.'
+
+[claim_kind]
+optimal = 1
+infeasible = 2
+unbounded = 3
+feasible_bound_gap = 4
+feasible_no_bound = 5
+
+# ---------------------------------------------------------------------------
+# Record kinds
+# ---------------------------------------------------------------------------
+
+[record.transform]
+code = 1
+name = 'Transform'
+payload = 'The transform rule identifier, its parameters as specified in transforms.toml, and the canonical hash of the model it produces.'
+check = 'The verifier recomputes the next model from the model it already holds and compares the hash. The coefficients the record states about the result are never read as fact.'
+trap = 'trap_transform_after_data_not_trusted'
+
+[record.transform_contradiction]
+code = 2
+name = 'TransformContradiction'
+payload = 'The transform rule identifier and the source row or bound identifiers from which the empty domain follows.'
+check = 'The verifier recomputes the derivation on the model it holds. It ends the certificate: no root and no tree may follow.'
+
+[record.root]
+code = 3
+name = 'Root'
+payload = 'The node identifier, which is always 0, and the canonical hash of the reduced model the tree is about.'
+check = 'The hash must equal the hash of the model the verifier holds after replaying every transform.'
+
+[record.dual_bound]
+code = 16
+name = 'DualBound'
+payload = 'A node identifier and a list of pairs of a visible inequality identifier and a nonnegative rational multiplier.'
+check = 'See the inference rules below.'
+
+[record.contradiction]
+code = 17
+name = 'Contradiction'
+payload = 'A node identifier and a list of pairs of a visible inequality identifier and a nonnegative rational multiplier.'
+check = 'See the inference rules below.'
+
+[record.gmi_cut]
+code = 32
+name = 'GmiCut'
+payload = 'A node identifier defining the scope, the row combination multipliers over visible inequalities, the isolated integer basic variable, the bound state of each nonbasic displacement, and the resulting cut coefficients and right-hand side.'
+check = 'The verifier reconstructs the tableau equation and recomputes every cut coefficient by the formula in cuts.toml. The stated coefficients are compared, never adopted.'
+
+[record.cover_cut]
+code = 33
+name = 'CoverCut'
+payload = 'A node identifier, the source inequality identifier, the cover membership, the lift order, and the lifted coefficients.'
+check = 'The verifier confirms the cover is a cover and recomputes each lifted coefficient by the dynamic program in cuts.toml.'
+
+[record.branch]
+code = 48
+name = 'Branch'
+payload = 'The parent node identifier, the branching variable, the integer split value k, and the two fresh child node identifiers.'
+check = 'The variable must be declared integer, k must be an exact integer, both children must be new, and the assumptions are exactly x <= k on the left child and x >= k + 1 on the right.'
+trap = 'trap_branch_noninteger_variable'
+
+[record.leaf_bound]
+code = 64
+name = 'Leaf.Bound'
+payload = 'A node identifier and the identifier of a DualBound at that node.'
+check = 'The cited bound must be at this node and, for an optimal or gap claim, must be at least the incumbent objective.'
+
+[record.leaf_infeas]
+code = 65
+name = 'Leaf.Infeas'
+payload = 'A node identifier and the identifier of a Contradiction at that node.'
+
+[record.leaf_integral]
+code = 66
+name = 'Leaf.Integral'
+payload = 'A node identifier, the reduced-space point, and the identifier of a DualBound at that node.'
+check = 'The point must be exactly feasible for the reduced model and integral where declared, and its objective must equal the cited exact lower bound. The point alone proves nothing about the node and the format cannot express a leaf without the bound.'
+trap = 'trap_integral_leaf_without_bound'
+
+[record.leaf_frontier]
+code = 67
+name = 'Leaf.Frontier'
+payload = 'A node identifier and the identifier of a DualBound at that node.'
+check = 'The bound must be finite. A frontier whose bound is at least the incumbent objective is not a frontier and must be encoded as a closed Bound leaf.'
+
+[record.incumbent]
+code = 80
+name = 'Incumbent'
+payload = 'The dense reduced-space point, the dense original-space point, and the claimed objective U.'
+check = 'Transform replay must map the reduced point forward and the original point back consistently. The original point is checked against the original model directly: every row side, every finite bound, integrality where declared, and the exact objective.'
+
+[record.feasible_point]
+code = 81
+name = 'FeasiblePoint'
+payload = 'The dense original-space point and the claimed objective U.'
+check = 'Checked directly against the original bytes. It supports no bound and no gap.'
+
+[record.ray]
+code = 82
+name = 'Ray'
+payload = 'The original-space point x0, the direction d, and, for a mixed-integer claim, the positive integer step q.'
+check = 'See the unbounded closure in claims.toml.'
+
+[record.claim]
+code = 96
+name = 'Claim'
+payload = 'The claim kind, the objective U where the claim has one, and the lower bound L and exact gap where the claim has them.'
+check = 'The stated values must equal the recomputed ones and the kind must equal the header kind. Recomputation decides.'
+
+[record.end]
+code = 127
+name = 'End'
+payload = 'A count per record kind, ordered by record type code, followed by the CRC-32C checksum.'
+check = 'The counts must equal what was actually read.'
+
+# ---------------------------------------------------------------------------
+# Record order
+# ---------------------------------------------------------------------------
+
+[order]
+principle = 'Parent before child, and every citation backwards. The solver mutates its tree in this order too, so serialization is a write rather than a sort, and a certificate whose order had to be repaired would be evidence that the search and the proof disagree about what happened.'
+lp_optimal = 'Transform* Root DualBound Incumbent Claim End'
+lp_infeasible = 'Transform* Root Contradiction Claim End'
+lp_gap = 'Transform* Root DualBound Incumbent Claim End, with the gap claim kind and a recomputed L strictly less than U.'
+presolve_infeasible = 'Transform* TransformContradiction Claim End, with no root and no tree.'
+milp_tree = 'Transform* Root, then Cut, DualBound, Contradiction, Branch, and Leaf records interleaved parent before child, then the Incumbent required by an optimal or gap claim, then Claim End.'
+point_only = 'FeasiblePoint Claim End. Transform, root, and tree records are forbidden.'
+unbounded = 'Ray Claim End. Transform, root, and tree records are forbidden.'
+
+# ---------------------------------------------------------------------------
+# Scope and visibility
+# ---------------------------------------------------------------------------
+
+[scope]
+visible = 'At a node, the visible inequalities are: both finite sides of every reduced row, every finite variable bound, every branch assumption on the path from the root to that node, and every already-verified cut whose scope node is that node or an ancestor of it.'
+root_scope = 'The root is the only global scope. A cut derived at the root is visible everywhere.'
+local = 'A cut derived at a node is usable at that node and its descendants and nowhere else. It is not promoted by aging, by rediscovery, by pool deduplication, or by any other mechanism. Pool deduplication operates within an ancestry, never across one.'
+sibling = 'A citation from a sibling subtree is rejected. This is the failure that would quietly invalidate every descendant proof using the pool entry, which is why it is enforced in the solver and again here.'
+forward = 'A citation of an identifier greater than or equal to the citing record is rejected.'
+traps = ['trap_local_cut_escape', 'trap_scope_sibling_reference', 'trap_inference_future_reference', 'trap_tableau_row_scope']
+
+# ---------------------------------------------------------------------------
+# The inference rules
+# ---------------------------------------------------------------------------
+
+[inference.dual_bound]
+name = 'DualBound'
+statement = 'Given nonnegative rational multipliers over visible inequalities written a dot x >= b, if the multiplied coefficients sum coefficient for coefficient to the reduced objective vector, then the objective is bounded below by the objective constant plus the sum of the multiplied right-hand sides.'
+checks = ['every multiplier is a rational strictly greater than zero', 'every cited identifier is visible at the node', 'the summed coefficient vector equals the reduced objective vector exactly, in every component including the zeros', 'the resulting bound L is recomputed as objective_constant + sum of lambda times b']
+zero_multipliers = 'A zero multiplier is noncanonical and rejects. It contributes nothing and its only effect is to give one inference two encodings.'
+traps = ['trap_negative_dual_multiplier', 'trap_recompute_not_restate']
+
+[inference.contradiction]
+name = 'Contradiction'
+statement = 'Given nonnegative rational multipliers over visible inequalities, if the multiplied coefficients sum to the zero vector and the multiplied right-hand sides sum to a strictly positive value, the node is infeasible.'
+checks = ['every multiplier is strictly greater than zero', 'every cited identifier is visible at the node', 'the summed coefficient vector is exactly zero in every component', 'the summed right-hand side is strictly greater than zero']
+completeness = 'Because finite variable bounds are canonical inequalities with identifiers, this single form covers what is elsewhere split into row multipliers plus an implicit bound convention. There is no omitted-bound case.'
+trap = 'trap_infeasible_farkas_bounds'
+
+[inference.gmi_cut]
+name = 'GmiCut'
+statement = 'The literal formula in cuts.toml, applied to a tableau equation the verifier reconstructs from visible row equations.'
+reference = 'cuts.toml'
+
+[inference.cover_cut]
+name = 'CoverCut'
+statement = 'The cover inequality, optionally strengthened by sequential lifting coefficients recomputed by the dynamic program in cuts.toml.'
+reference = 'cuts.toml'
+
+[inference.transform]
+name = 'Transform'
+statement = 'The eight equivalences in transforms.toml, each recomputed on the model the verifier holds.'
+reference = 'transforms.toml'
+
+[inference.closed]
+rule = 'The five entries above are the entire calculus. Extending it requires a hand-worked derivation, an ADR, a version bump, and new vectors. Adding a rule that accepts a derivation previously rejected is permitted only through that door; making the verifier quietly more permissive is forbidden outright.'
+
+# ---------------------------------------------------------------------------
+# The tableau view
+# ---------------------------------------------------------------------------
+#
+# GMI needs a notion of a tableau row, and a tableau is solver state. Rather
+# than trust any of it, the verifier constructs the view itself from the model
+# and treats the certificate as supplying only the combination to take.
+
+[tableau]
+construction = 'For each visible ranged, base, or cut row, deterministically introduce one continuous activity variable s_i defined by s_i = a_i dot x, carrying that row finite or infinite bounds.'
+status = 'This is verifier-reconstructed definitional state. It is never an axiom the certificate supplies and never something the certificate may assert a value for.'
+requirement = 'The recorded unrestricted rational combination of the equations s_i - a_i dot x = 0 must isolate exactly one integer original or aggregate variable with coefficient one, and every other basic coefficient must be exactly zero.'

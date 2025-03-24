@@ -1,0 +1,100 @@
+# Terminal claims and their closure, version 1.
+#
+# The vocabulary is closed. There is no status meaning probably optimal, none
+# meaning optimal within tolerance, and none meaning the search ran out of
+# budget but the answer is almost certainly right. Every entry below either
+# names a proof the verifier accepted or admits that no claim is being made.
+
+[meta]
+version = 1
+title = 'Terminal claims v1'
+summary = 'The closed terminal vocabulary, what each claim asserts, and the mechanical closure rule that decides it.'
+
+[principle]
+recomputation = 'The verdict comes from recomputing the closure rule over the records, never from the status text the certificate states. The stated claim, the header claim kind, and the recomputed closure must all agree, and the recomputation is what decides.'
+no_self_judgement = 'The solver runs its own exact screening as a diagnostic. It is not permitted to be the reason a status is printed as certified. Only the standalone verifier accepting the certificate permits that.'
+severity_zero = 'A false terminal claim is the worst defect this project can have. A certificate the verifier rejects is a solver defect, not a verifier defect, unless a hand-worked derivation and an ADR demonstrate otherwise.'
+degrade = 'Every failure path degrades to a weaker true statement. There is no path that upgrades a weaker statement to a stronger one.'
+
+# ---------------------------------------------------------------------------
+# The claims
+# ---------------------------------------------------------------------------
+
+[claim.optimal]
+name = 'optimal'
+asserts = 'The stated objective value U is attained by a feasible point of the original model, and no feasible point has a smaller objective.'
+requires = 'An incumbent with both original-space and reduced-space points, and a tree whose cover is recursively complete with no open frontier.'
+leaves = ['Bound', 'Infeas', 'Integral']
+closure = 'Every Bound leaf and every Integral leaf proves a lower bound greater than or equal to U. No Frontier leaf exists. The incumbent is exactly feasible and integral in the original model and its objective equals U exactly.'
+lp_form = 'For a pure LP the tree degenerates to a root DualBound L with L equal to the incumbent objective exactly.'
+canonicalization = 'A finite-gap claim whose recomputed L equals its U is canonicalized to optimal rather than published as a zero gap.'
+
+[claim.infeasible]
+name = 'infeasible'
+asserts = 'The original model has no feasible point.'
+requires = 'Either a transform contradiction the verifier recomputes from the model preceding it, or a root tree in which every leaf carries a contradiction.'
+leaves = ['Infeas']
+closure = 'Every leaf of a complete recursive cover is an Infeas leaf whose multipliers are nonnegative, sum to the zero coefficient vector, and have a strictly positive right-hand side sum. The presolve route needs no root and no tree.'
+note = 'Because finite variable bounds are explicit axioms alongside row sides, a contradiction here is a complete Farkas witness. There is no convention about which bounds were implicitly available.'
+
+[claim.unbounded]
+name = 'unbounded'
+asserts = 'The original model has feasible points of arbitrarily small objective value.'
+requires = 'An original-space exact feasible point x0 and a recession direction d, and for a mixed-integer model a positive integer step q.'
+closure = 'Every row direction and every finite bound holds for x0 + t d with t nonnegative in the linear case. For a mixed-integer model, every integer component of q d is an exact integer, x0 is integral where declared, x0 + n q d satisfies every row and bound for every nonnegative integer n, and c dot d is strictly negative.'
+forbidden = 'A linear relaxation ray alone does not establish this for a mixed-integer model. An unbounded relaxation without the integer-compatible witness terminates as no-progress with the uncertified-relaxation reason.'
+trap = 'trap_lp_ray_not_mip_ray'
+records = 'The certificate carries the ray form alone. Transform, root, and tree records are forbidden in it, because the check is made directly against the original bytes and would neither need nor trust them.'
+
+[claim.feasible_bound_gap]
+name = 'feasible(bound,gap)'
+asserts = 'The stated point is feasible with objective U, and no feasible point has objective smaller than the stated L. The gap between them is exactly the stated rational.'
+requires = 'An incumbent, at least one Frontier leaf with a finite exact lower bound strictly less than U, and an exact bound for every open frontier node.'
+closure = 'Every closed Bound or Integral leaf proves a bound greater than or equal to U. L is the minimum over all Frontier bounds. The reported relative gap is recomputed as (U - L) / max(1, |U|) in exact rational arithmetic. Strict inequality L < U is required; equality canonicalizes to optimal.'
+frontier_discipline = 'A frontier node whose exact bound is already at least U is encoded as a closed Bound leaf. Retaining it as open in order to manufacture a small gap is forbidden.'
+incomplete = 'If any open frontier node lacks a finite exact bound, this claim is unavailable. A partial tree is never presented as a gap certificate.'
+
+[claim.feasible_no_bound]
+name = 'feasible(no-certified-bound)'
+asserts = 'The stated point is feasible in the original model, is integral where declared, and has objective U. Nothing whatsoever about a lower bound.'
+requires = 'The canonical point-only certificate form: a dense original-space vector and its claimed objective.'
+closure = 'The verifier reparses the original bytes, checks every row side and every finite bound, checks integrality where declared, and recomputes U. It derives no bound and reports no gap.'
+records = 'Transform and tree records are forbidden in this form. Including them would imply support the claim does not have, and a reader who saw a tree would reasonably infer a bound existed.'
+honesty = 'This status exists so that a solve which found something real but could not prove anything about optimality has a true thing to say. It is not a failure mode dressed up; it is the accurate report.'
+
+[claim.no_progress]
+name = 'no-progress'
+asserts = 'Nothing. No mathematical claim is made.'
+requires = 'No certificate.'
+reasons = ['effort budget exhausted with no certifiable point or bound', 'numerical escalation exhausted', 'unbounded relaxation without an integer-compatible ray', 'a frontier node that could not be certified when no incumbent exists', 'a cap exceeded before assembly completed']
+honesty = 'This is an honest answer and is published as one. The scoreboard shows it permanently rather than hiding the instance.'
+trap = 'trap_no_silent_fallback'
+
+# ---------------------------------------------------------------------------
+# Non-claims
+# ---------------------------------------------------------------------------
+
+[non_claim.candidate]
+name = 'candidate-*'
+meaning = 'The result of a solve run with certificates disabled. It is labelled uncertified, is excluded from the terminal vocabulary and from every scoreboard, and is recorded as such in the trace.'
+reason = 'The switch exists for search experiments. Allowing its output into a results table would make the entire table meaningless.'
+
+[non_claim.error_cert_assembly]
+name = 'error(CertAssembly)'
+meaning = 'Exact assembly could not produce a certificate for the candidate status. The candidate status is not printed as though it had been certified.'
+
+[non_claim.error_verify_reject]
+name = 'error(VerifyReject)'
+meaning = 'The independently invoked verifier rejected the assembled certificate. The rejection identifier and offending record are reported.'
+severity = 'This is a defect, and it is filed as one. It is never resolved by relaxing the verifier.'
+
+# ---------------------------------------------------------------------------
+# Gap semantics
+# ---------------------------------------------------------------------------
+
+[gap]
+formula = '(U - L) / max(1, |U|)'
+arithmetic = 'Exact rational throughout. The printed decimal is a rounded rendering of the exact value and is labelled as such.'
+float_gap = 'The float gap computed during the search guides node selection and appears in the trace as a search quantity. It may never label a certificate, appear in a scoreboard cell, or be rendered in the interface in the style reserved for exact values.'
+negative = 'A negative gap is an invariant violation, not a small number. It is a panic in the solver and a rejection in the verifier.'
+trap = 'trap_gap_never_negative'

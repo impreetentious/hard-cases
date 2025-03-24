@@ -1,0 +1,202 @@
+# Canonical exact model, version 1.
+#
+# The raw input bytes are part of the theorem. A certificate does not prove
+# something about a model the solver happened to build in memory; it proves
+# something about the file, identified by a hash over those exact bytes. Every
+# rule below exists so that two independently written parsers, given the same
+# bytes, arrive at the same mathematical object and can say so byte for byte.
+
+[meta]
+version = 1
+title = 'Canonical exact model v1'
+summary = 'How raw instance bytes become the exact model a proof is about, and how two parsers demonstrate they agree.'
+
+# ---------------------------------------------------------------------------
+# Format tags and the instance digest
+# ---------------------------------------------------------------------------
+#
+# The tag is prepended to the raw bytes before hashing so that the same byte
+# sequence read under two different format rules cannot produce the same digest.
+# Fixed and free MPS differ here precisely because they can disagree about a
+# file that is legal under both.
+
+[digest]
+rule = 'instance_digest = SHA-256(format_tag_byte || raw_bytes)'
+tag_position = 'The single tag byte is prepended. The raw bytes are otherwise unmodified: no newline normalization, no trailing-whitespace strip, no BOM removal, no case folding.'
+byte_order = 'The digest is used as 32 bytes in SHA-256 output order. Where a u64 is needed, it is the little-endian read of bytes 0 through 7.'
+mismatch = 'A certificate whose header digest does not equal the digest recomputed from the supplied instance file is rejected before any proof rule runs.'
+
+[format_tag.mps_fixed]
+byte = 1
+name = 'MPS, fixed columns'
+
+[format_tag.mps_free]
+byte = 2
+name = 'MPS, free form'
+
+[format_tag.lp]
+byte = 3
+name = 'LP format subset'
+
+[format_tag.json]
+byte = 4
+name = 'JSON instance schema'
+
+# ---------------------------------------------------------------------------
+# Exact values from text
+# ---------------------------------------------------------------------------
+
+[exactness]
+rule = 'Every numeric coefficient, bound, right-hand side, and objective value becomes a rational directly from its decimal characters. There is no intermediate binary floating-point value anywhere on this path.'
+reason = 'A parser that reads 0.1 as the nearest binary64 and then converts to a rational produces 3602879701896397/36028797018963968. Proving a theorem about that number is proving a theorem about a model nobody wrote.'
+decimal_to_rational = 'A token matching an optional sign, digits with at most one decimal point, and an optional exponent introduced by e or E maps to sign * mantissa_digits / 10^fractional_digits * 10^exponent, reduced to lowest terms. The scaling by powers of ten is exact rational multiplication or division, never repeated floating multiplication.'
+retained_text = 'The parser retains the original coefficient text alongside the reduced rational. The text is what a diagnostic prints; the rational is what a proof uses.'
+
+[rational_text]
+rule = 'Canonical rational text is used in the canonical dump, in HCC records, and in every vector file, so that one syntax means one number everywhere.'
+form = 'Either an integer, written as its decimal digits with an optional leading minus, or a fraction p/q.'
+denominator = 'q is strictly positive and gcd(|p|, q) is 1. A denominator of 1 is never written; the value is written as the bare integer.'
+zero = 'Zero is written 0. Negative zero does not exist and the text -0 is rejected.'
+forbidden = 'A leading plus sign, leading zeros on a nonzero magnitude, internal or surrounding whitespace, an exponent, or a decimal point.'
+infinity = 'Infinity is not a rational and has no rational text. Where a bound may be infinite, its absence is written as an asterisk.'
+
+# ---------------------------------------------------------------------------
+# The model
+# ---------------------------------------------------------------------------
+
+[model.sense]
+rule = 'The canonical model minimizes. A maximization instance is negated at the parse boundary: every objective coefficient and the objective constant are negated, and the recorded original sense is carried only so that reports and the postsolved witness can be printed in the sense the author wrote.'
+trap = 'trap_maximize_sign'
+
+[model.objective_constant]
+rule = 'The objective is c dot x plus a rational constant.'
+mps_source = 'In MPS, a RHS entry naming the objective row supplies the constant as its negation: an entry of value v sets objective_constant = -v.'
+mps_reason = 'This is the convention the major readers share, and it is the one disagreement in the format most likely to silently shift every reported objective by a constant. It is written down here rather than discovered in a diff.'
+multiple = 'A second RHS entry on the objective row under the same vector name replaces the first, matching the general last-record-wins rule for repeated entries; the canonical dump therefore shows only the final value.'
+
+[model.rows]
+rule = 'Every constraint row becomes a pair of optional exact bounds, a lower L and an upper U, either of which may be absent.'
+mapping = 'A row of sense L becomes (absent, rhs). A row of sense G becomes (rhs, absent). A row of sense E becomes (rhs, rhs). A row of sense N other than the selected objective row is discarded, and its discarding is recorded in the canonical dump so both parsers agree it happened.'
+ranges = 'A RANGES entry replaces the absent side per the table in mps.toml. The sense-by-sign behaviour there is normative.'
+empty_row = 'A row with no nonzero coefficients is retained. It is either trivially satisfied or immediately contradictory, and which one it is must be decided by the same rules that decide everything else.'
+infeasible_row = 'A row whose L exceeds its U is not a parse error. It is an exactly contradictory model, and it is the presolve chain that produces the contradiction record.'
+
+[model.variables]
+rule = 'Every variable carries an exact lower bound, an exact upper bound, either possibly infinite, an integrality flag, and an exact objective coefficient.'
+default_bounds = 'A variable with no BOUNDS entry has lower bound 0 and no upper bound. A variable declared integer by INTORG and INTEND markers and given no BOUNDS entry has lower bound 0 and no upper bound; the common alternative reading that gives it an implicit upper bound of 1 is rejected, and mps.toml states this.'
+effective_bounds = 'For an integer variable, the effective bounds used by branching and by presolve applicability tests are ceil(L) and floor(U). The original rational bounds remain the axioms cited by proofs; the effective bounds are a search convenience and never appear in an inference.'
+empty_intersection = 'A variable whose effective lower bound exceeds its effective upper bound is contradictory, handled as in model.rows and never as a parse error.'
+
+[model.nonzeros]
+duplicates = 'Two entries naming the same row and column are summed exactly.'
+zero_sum = 'When duplicate entries sum to zero, the entry is absent from the matrix and the canonical dump records a zero-sum note naming the row and column. Both parsers emit that note, so a cancellation cannot be the difference between two canonical dumps that are otherwise equal.'
+explicit_zero = 'A single entry whose value is exactly zero is not stored and produces no note. It carries no information; a cancellation does.'
+
+[model.names]
+rule = 'Names are labels attached for reporting. They are never identifiers in a proof, and no inference cites one.'
+uniqueness = 'Duplicate row names or duplicate column names are rejected. Ambiguity in what a later record refers to is not something to resolve by a rule; it is a broken file.'
+limits = 'A name is at most the byte length given in numeric.toml and may not contain a line feed.'
+
+# ---------------------------------------------------------------------------
+# Canonical inequality identifiers
+# ---------------------------------------------------------------------------
+#
+# Every axiom a proof may cite is one of these. There is no separate convention
+# for variable bounds, which is what makes a contradiction record a complete
+# Farkas witness with nothing omitted by custom.
+
+[inequalities]
+form = 'Every canonical inequality is written a dot x >= b.'
+row_lower = 'A finite row lower bound L contributes a dot x >= L with the row coefficients unchanged.'
+row_upper = 'A finite row upper bound U contributes the negated row, -a dot x >= -U.'
+var_lower = 'A finite variable lower bound l_j contributes the unit inequality x_j >= l_j.'
+var_upper = 'A finite variable upper bound u_j contributes -x_j >= -u_j.'
+order = 'Identifiers are assigned as consecutive integers from 0. First every finite row side in row parse order, and within a ranged row the lower side before the upper side. Then every finite variable bound in variable index order, and within a variable the lower bound before the upper bound.'
+stability = 'Identifiers depend only on the canonical model, so the same file always yields the same identifiers. Cuts and branch assumptions receive identifiers above this base block, assigned in certificate record order.'
+
+# ---------------------------------------------------------------------------
+# The canonical dump
+# ---------------------------------------------------------------------------
+#
+# This is how the two parsers demonstrate agreement. It is compared as bytes,
+# because a comparison that goes through either implementation model type would
+# be comparing one of them against itself.
+
+[dump]
+purpose = 'A total, byte-comparable rendering of the canonical model. The solver parser and the verifier parser each emit it and the results must be identical bytes.'
+encoding = 'ASCII, line feed line endings, a trailing line feed after the final line, no other trailing whitespace anywhere.'
+numbers = 'Every rational is canonical rational text. An absent bound is a single asterisk. Indices are decimal with no padding.'
+ordering = 'Sections appear in the order given below. Within a section, lines are in the stated order, which is total: there is never a choice to make.'
+
+[dump.line.header]
+order = 1
+form = 'hc-canonical 1'
+note = 'The literal magic and the canonicalization version. A dump whose version differs is not compared; it is a different contract.'
+
+[dump.line.format]
+order = 2
+form = 'format <tag_decimal>'
+note = 'The format tag byte in decimal, so the dump records which rules produced it.'
+
+[dump.line.digest]
+order = 3
+form = 'digest <64 lowercase hex characters>'
+
+[dump.line.sense]
+order = 4
+form = 'sense min original=<min|max>'
+note = 'The canonical sense is always min. The original sense is recorded because the negation is otherwise invisible and a sign error in it is the classic silent failure.'
+
+[dump.line.objconst]
+order = 5
+form = 'objconst <rational>'
+
+[dump.line.counts]
+order = 6
+form = 'counts vars=<n> rows=<m> nonzeros=<k> ineqs=<p>'
+note = 'Present so a truncated dump cannot compare equal to a complete one by accident.'
+
+[dump.line.var]
+order = 7
+form = 'var <index> <I|C> <lb|*> <ub|*> <obj> <name>'
+repeat = 'One line per variable in variable index order.'
+note = 'The name is last on the line and runs to the line feed, so a name containing a space needs no quoting and no escape.'
+
+[dump.line.row]
+order = 8
+form = 'row <index> <lb|*> <ub|*> <name>'
+repeat = 'One line per retained row in row index order.'
+
+[dump.line.discarded]
+order = 9
+form = 'discarded <name>'
+repeat = 'One line per free row discarded after objective selection, in parse order.'
+
+[dump.line.nz]
+order = 10
+form = 'nz <var_index> <row_index> <rational>'
+repeat = 'One line per stored nonzero, ordered by variable index and then by row index, which is the order of the compressed-column storage the solver builds.'
+
+[dump.line.zerosum]
+order = 11
+form = 'zerosum <var_index> <row_index>'
+repeat = 'One line per cancelled duplicate pair, in the same order as nz lines would have been.'
+
+[dump.line.ineq]
+order = 12
+form = 'ineq <id> <row|var> <index> <lower|upper>'
+repeat = 'One line per canonical inequality in identifier order. The inequality itself is determined by the model above; restating its coefficients here would invite a dump that agrees while the models differ.'
+
+[dump.line.end]
+order = 13
+form = 'end'
+
+# ---------------------------------------------------------------------------
+# Rejection, not repair
+# ---------------------------------------------------------------------------
+
+[strictness]
+default = 'Strict. A file that is not unambiguously within the accepted subset is rejected with an identifier, never repaired by inference.'
+lenient = 'The solver offers a lenient mode which documents each thing it forgives. A lenient parse may be solved, but it may not carry an HCC claim unless the verifier strict parser independently accepts the same bytes. The verifier has no lenient mode at all.'
+reject_nan = 'Tokens spelling a not-a-number or an infinity are rejected wherever a number is expected. There is no rational for them and no useful thing to do with one.'
+reject_unknown = 'An unknown section, an unknown bound type, or an unrecognized field rejects. Forward compatibility by ignoring what is not understood is a reasonable policy for a configuration file and a disastrous one for a proof.'
