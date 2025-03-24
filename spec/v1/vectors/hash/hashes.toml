@@ -1,0 +1,73 @@
+# Hash vectors, version 1.
+#
+# The verifier implements SHA-256 and CRC-32C from scratch, because taking a
+# dependency for them would put someone else code inside the trusted base for
+# the sake of two well-specified functions. These are the published vectors plus
+# the ones this project needs: the exact strings that appear in a certificate
+# header, and a message long enough to exercise multi-block padding.
+
+[meta]
+version = 1
+title = 'Hash vectors v1'
+summary = 'SHA-256 and CRC-32C over named byte strings, including the certificate magic.'
+
+[sha256]
+input_encoding = 'ASCII, with repeat giving a byte repeated that many times.'
+
+[sha256.empty]
+input = ''
+digest = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+covers = 'The empty message, which is padding and length encoding with no data at all.'
+
+[sha256.abc]
+input = 'abc'
+digest = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+covers = 'The canonical published vector, one block after padding.'
+
+[sha256.two_block]
+input = 'abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq'
+digest = '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1'
+covers = 'The published two-block vector, fifty-six bytes, which is exactly the length where the length field no longer fits in the first block and padding spills into a second.'
+
+[sha256.million_a]
+input = 'a'
+repeat = 1000000
+digest = 'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0'
+covers = 'The published long-message vector, which catches a length counter that overflows or is byte-swapped.'
+
+[sha256.magic]
+input = 'HCC1'
+digest = '100a778fd4f638d1fa94e55f66f313e81680b2c8285e460013fa14ac6ff2e183'
+covers = 'The certificate magic, hashed here so a header vector can be assembled by hand.'
+
+[crc32c]
+polynomial = '0x82f63b78'
+initial = '0xffffffff'
+final_xor = '0xffffffff'
+reflected = true
+
+[crc32c.empty]
+input = ''
+crc = '0x00000000'
+covers = 'The empty input, which must yield zero after the final exclusive-or and not the initial value.'
+
+[crc32c.check]
+input = '123456789'
+crc = '0xe3069283'
+covers = 'The standard check value for every CRC variant, which pins the polynomial, the reflection, and both exclusive-ors together.'
+
+[crc32c.single_byte]
+input = 'a'
+crc = '0xc1d04330'
+covers = 'A single byte, the shortest input that actually enters the loop.'
+
+[crc32c.magic]
+input = 'HCC1'
+crc = '0x31b69343'
+covers = 'The certificate magic, which is the first four bytes every real checksum covers.'
+
+[crc32c.project]
+input = 'hard-cases'
+crc = '0xd48cc147'
+covers = 'A ten-byte input, long enough that a table-driven implementation and a bitwise one must agree over several table lookups.'
+

@@ -1,0 +1,69 @@
+# Deterministic generation, version 1.
+#
+# The solver draws random numbers in exactly two places: the bound perturbation
+# that breaks degeneracy, and the flips that break a cycling feasibility pump.
+# Neither draw may depend on anything the machine happens to know. The stream is
+# derived from the instance bytes and the user seed and from nothing else, so
+# the same file solved on two machines produces the same tree, the same log, and
+# the same certificate bytes.
+
+[meta]
+version = 1
+title = 'Deterministic generation v1'
+summary = 'The digest-to-seed derivation, the two recurrences, and frozen state and output vectors.'
+
+[seeding]
+user_seed = 'A u64, defaulting to 0, recorded in the report and in the trace.'
+rule = 'seed64 = LE_u64(instance_digest[0..8]) XOR user_seed'
+reason = 'Binding the stream to the instance digest means an identical seed on two different models does not produce correlated searches, and it makes the stream part of what the digest already covers.'
+initialization = 'Four consecutive SplitMix64 outputs from seed64 initialize the xoshiro256++ state in word order: the first output becomes s0, then s1, s2, and s3.'
+consumption = 'Perturbation and pump draws consume that one stream in event order. There is no second stream, no reseeding mid-solve, and no per-subsystem generator.'
+
+[splitmix64]
+role = 'Seed expansion only. It never produces a value the solver uses directly.'
+gamma = '0x9e3779b97f4a7c15'
+recurrence = 'x += gamma; z = x; z = (z XOR (z >> 30)) * 0xbf58476d1ce4e5b9; z = (z XOR (z >> 27)) * 0x94d049bb133111eb; output z XOR (z >> 31)'
+arithmetic = 'All operations are on unsigned 64-bit values with wrapping addition and multiplication and logical right shifts.'
+
+[xoshiro256pp]
+role = 'The solver stream.'
+output = 'result = rotl(s0 + s3, 23) + s0'
+update = 't = s1 << 17; s2 ^= s0; s3 ^= s1; s1 ^= s2; s0 ^= s3; s2 ^= t; s3 = rotl(s3, 45)'
+ordering = 'The output is computed from the state before the update, and the update is applied in exactly the order written.'
+rotl = 'rotl(x, k) is a left rotation of a 64-bit value by k bits.'
+zero_state = 'An all-zero state is unreachable from the seeding rule above, and the implementation asserts it rather than defending against it.'
+
+# ---------------------------------------------------------------------------
+# Frozen vectors
+# ---------------------------------------------------------------------------
+#
+# Each vector gives a seed, the four state words the seeding rule produces from
+# it, and the first eight outputs of the generator initialized with that state.
+# Both implementations reproduce every value or the build fails.
+
+[vector.seed_zero]
+seed64 = '0x0000000000000000'
+state = ['0xe220a8397b1dcdaf', '0x6e789e6aa1b965f4', '0x06c45d188009454f', '0xf88bb8a8724c81ec']
+outputs = ['0x53175d61490b23df', '0x61da6f3dc380d507', '0x5c0fdf91ec9a7bfc', '0x02eebf8c3bbe5e1a', '0x7eca04ebaf4a5eea', '0x0543c37757f08d9a', '0xdb7490c75ab5026e', '0xd87343e6464bc959']
+note = 'The degenerate seed, which is also the default when the instance digest is all zero. It is included because a generator that special-cases zero somewhere would show it here.'
+
+[vector.seed_one]
+seed64 = '0x0000000000000001'
+state = ['0x910a2dec89025cc1', '0xbeeb8da1658eec67', '0xf893a2eefb32555e', '0x71c18690ee42c90b']
+outputs = ['0xcfc5d07f6f03c29b', '0xbf424132963fe08d', '0x19a37d5757aaf520', '0xbf08119f05cd56d6', '0x2f47184b86186fa4', '0x97299fcae7202345', '0xfca3c79508f41507', '0x85fea5c90363f221']
+
+[vector.seed_mixed]
+seed64 = '0x0123456789abcdef'
+state = ['0x157a3807a48faa9d', '0xd573529b34a1d093', '0x2f90b72e996dccbe', '0xa2d419334c4667ec']
+outputs = ['0xb2f2a310e96bd1c5', '0xb54062465b950493', '0x87aca4a9668814b0', '0xf13d2e2448a9cffb', '0xb7afdb427f6b86a2', '0xc3a68c4e4f50d0c7', '0x5bde00c2b40585ae', '0xb27e2dd974f18e8a']
+note = 'A seed with bits set across every byte, so a byte-order error in the seed path cannot pass.'
+
+[vector.from_instance]
+instance = 'vectors/mps/tiny.mps'
+format_tag = 1
+instance_digest = 'b4e79af6380a28d64f5664980bb3d252b7d45ce527ddc7eeeab2e0db160dce8d'
+user_seed = 0
+seed64 = '0xd6280a38f69ae7b4'
+state = ['0x5093024b5fdd4fe0', '0x67029703220f7daf', '0x75d3440078f9c5c1', '0x27cb05d32c516cd1']
+outputs = ['0x5fd919a9b8997ee4', '0x6a9c7f4b866ca3ca', '0x7c3c98324bda28f7', '0x91b7384a8f06dbb7']
+note = 'The end-to-end vector: bytes on disk, through the format tag and the digest, to the little-endian read, to the stream. Every step in the chain is checkable in isolation and this one checks that they compose.'

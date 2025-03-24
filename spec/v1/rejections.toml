@@ -1,0 +1,667 @@
+# Rejection identifiers, version 1.
+#
+# When the verifier says no, it says which rule said no. A verifier that returns
+# a boolean is a verifier nobody can argue with, and the ability to argue with it
+# is the point: a rejection identifier is what turns a disagreement between the
+# solver and the verifier into a bug report with an address.
+#
+# These identifiers are a public interface. hc verify prints them, the tamper
+# corpus pairs every mutation with the one it must produce, the situation room
+# displays them, and the case files cite them. They are append-only: an
+# identifier is never reused for a different check, and a retired one is marked
+# retired rather than removed.
+
+[meta]
+version = 1
+title = 'Rejection identifiers v1'
+summary = 'Every rejection identifier, the group it belongs to, and the earliest check that emits it.'
+
+[policy]
+earliest = 'Each identifier names exactly one check, and that check is the earliest point at which the defect is detectable. A tamper case that could plausibly be caught by two checks must be caught by the earlier one, so the corpus pins the order of the checks as well as their existence.'
+exit_code = 'hc verify exits 0 on acceptance and 1 on rejection, printing the identifier, the offending record, and the deterministic work units consumed.'
+grouping = 'The HCC groups cover the certificate. The instance group covers the original file, and exists because the two independent parsers must be able to disagree comparably: a differential test that sees one parser accept and the other reject needs to know whether they rejected for the same reason.'
+
+# ===========================================================================
+# HC-INSTANCE — parsing the original file
+# ===========================================================================
+
+[reject.HC-INSTANCE-01]
+group = 'HC-INSTANCE'
+check = 'File length against the parser byte cap, before reading.'
+message = 'instance file exceeds the maximum accepted size'
+
+[reject.HC-INSTANCE-02]
+group = 'HC-INSTANCE'
+check = 'Running nonzero count during COLUMNS, before each insertion.'
+message = 'instance exceeds the maximum accepted nonzero count'
+
+[reject.HC-INSTANCE-03]
+group = 'HC-INSTANCE'
+check = 'Name length and content at the point the name is read.'
+message = 'name exceeds the maximum length or contains a line feed'
+
+[reject.HC-INSTANCE-04]
+group = 'HC-INSTANCE'
+check = 'Numeric token length, before the token is interpreted.'
+message = 'numeric token exceeds the maximum token length'
+
+[reject.HC-INSTANCE-05]
+group = 'HC-INSTANCE'
+check = 'Projected bit length computed from the token, before any limb is allocated.'
+message = 'numeric token projects a rational exceeding the bit cap'
+
+[reject.HC-INSTANCE-06]
+group = 'HC-INSTANCE'
+check = 'Binary64 round-trip of each exact nonzero model value, after construction.'
+message = 'exact nonzero value does not round to a nonzero finite binary64'
+
+[reject.HC-INSTANCE-07]
+group = 'HC-INSTANCE'
+check = 'Numeric token syntax.'
+message = 'numeric token is malformed or spells a not-a-number or infinity'
+
+[reject.HC-INSTANCE-08]
+group = 'HC-INSTANCE'
+check = 'Section header against the accepted list.'
+message = 'unknown section header'
+
+[reject.HC-INSTANCE-09]
+group = 'HC-INSTANCE'
+check = 'Section order and repetition, at the header.'
+message = 'section appears out of order or more than once'
+
+[reject.HC-INSTANCE-10]
+group = 'HC-INSTANCE'
+check = 'Presence of required sections, at end of parse.'
+message = 'a required section is missing'
+
+[reject.HC-INSTANCE-11]
+group = 'HC-INSTANCE'
+check = 'Objective selection, at the end of ROWS.'
+message = 'no objective row was declared'
+
+[reject.HC-INSTANCE-12]
+group = 'HC-INSTANCE'
+check = 'Row name lookup, at the referencing record.'
+message = 'record references an undeclared row'
+
+[reject.HC-INSTANCE-13]
+group = 'HC-INSTANCE'
+check = 'Column name lookup, at the referencing record.'
+message = 'record references an undeclared column'
+
+[reject.HC-INSTANCE-14]
+group = 'HC-INSTANCE'
+check = 'Row name insertion in ROWS.'
+message = 'duplicate row name'
+
+[reject.HC-INSTANCE-15]
+group = 'HC-INSTANCE'
+check = 'Column name insertion in COLUMNS.'
+message = 'duplicate column name'
+
+[reject.HC-INSTANCE-16]
+group = 'HC-INSTANCE'
+check = 'Vector name of the second distinct RHS, RANGES, or BOUNDS vector.'
+message = 'multiple named vectors in one section are not supported'
+
+[reject.HC-INSTANCE-17]
+group = 'HC-INSTANCE'
+check = 'Bound type against the accepted list.'
+message = 'unsupported bound type'
+
+[reject.HC-INSTANCE-18]
+group = 'HC-INSTANCE'
+check = 'Integrality of the value on an LI or UI record.'
+message = 'integer bound value is not an exact integer'
+
+[reject.HC-INSTANCE-19]
+group = 'HC-INSTANCE'
+check = 'Sign of a UP value against the current lower bound, in strict mode.'
+message = 'negative upper bound on a column with the default lower bound is ambiguous'
+
+[reject.HC-INSTANCE-20]
+group = 'HC-INSTANCE'
+check = 'Field extent in fixed form, at the point the field is read.'
+message = 'field content overruns its fixed-form column window'
+
+[reject.HC-INSTANCE-21]
+group = 'HC-INSTANCE'
+check = 'Marker balance, at each marker record and at the end of COLUMNS.'
+message = 'unbalanced or nested INTORG and INTEND markers'
+
+[reject.HC-INSTANCE-22]
+group = 'HC-INSTANCE'
+check = 'Column identity against the current column, at each COLUMNS record.'
+message = 'column records are not contiguous'
+
+[reject.HC-INSTANCE-23]
+group = 'HC-INSTANCE'
+check = 'Row sense of the target, at each RANGES record.'
+message = 'RANGES entry names the objective row or a free row'
+
+[reject.HC-INSTANCE-24]
+group = 'HC-INSTANCE'
+check = 'Bound type and column against previously applied bounds.'
+message = 'duplicate bound of the same type on one column'
+
+[reject.HC-INSTANCE-25]
+group = 'HC-INSTANCE'
+check = 'Field count in free form, at each record.'
+message = 'record carries more fields than its type accepts'
+
+[reject.HC-INSTANCE-26]
+group = 'HC-INSTANCE'
+check = 'End of input before the terminating section.'
+message = 'unexpected end of input before ENDATA'
+
+[reject.HC-INSTANCE-27]
+group = 'HC-INSTANCE'
+check = 'LP-format grammar, at the offending token.'
+message = 'LP-format input does not match the accepted grammar'
+
+[reject.HC-INSTANCE-28]
+group = 'HC-INSTANCE'
+check = 'JSON instance schema, at the offending member.'
+message = 'JSON instance does not match the accepted schema'
+
+# ===========================================================================
+# HCC-PARSE — reading the certificate
+# ===========================================================================
+
+[reject.HCC-PARSE-01]
+group = 'HCC-PARSE'
+check = 'First four bytes of the stream.'
+message = 'certificate magic is not HCC1'
+
+[reject.HCC-PARSE-02]
+group = 'HCC-PARSE'
+check = 'Header version fields.'
+message = 'unsupported HCC or canonicalization version'
+
+[reject.HCC-PARSE-03]
+group = 'HCC-PARSE'
+check = 'Header digest against the digest recomputed from the supplied instance.'
+message = 'certificate is not bound to this instance'
+
+[reject.HCC-PARSE-04]
+group = 'HCC-PARSE'
+check = 'Declared record count and byte length against the caps, before any allocation.'
+message = 'declared certificate size exceeds a cap'
+
+[reject.HCC-PARSE-05]
+group = 'HCC-PARSE'
+check = 'LEB128 decoding, at the value.'
+message = 'non-minimal LEB128 encoding'
+
+[reject.HCC-PARSE-06]
+group = 'HCC-PARSE'
+check = 'LEB128 decoding, at the value.'
+message = 'LEB128 value does not fit in 64 bits'
+
+[reject.HCC-PARSE-07]
+group = 'HCC-PARSE'
+check = 'Available bytes against the record length, before reading the payload.'
+message = 'certificate stream is truncated'
+
+[reject.HCC-PARSE-08]
+group = 'HCC-PARSE'
+check = 'Remaining bytes after the End record.'
+message = 'trailing bytes follow the End record'
+
+[reject.HCC-PARSE-09]
+group = 'HCC-PARSE'
+check = 'Checksum over the covered range, at the End record.'
+message = 'CRC-32C checksum mismatch'
+
+[reject.HCC-PARSE-10]
+group = 'HCC-PARSE'
+check = 'Record type against the closed list.'
+message = 'unknown record type'
+
+[reject.HCC-PARSE-11]
+group = 'HCC-PARSE'
+check = 'Bytes consumed by the payload against the declared record length.'
+message = 'record payload length disagrees with its declared length'
+
+[reject.HCC-PARSE-12]
+group = 'HCC-PARSE'
+check = 'Record identifier against the previous identifier.'
+message = 'record identifiers are not strictly increasing'
+
+[reject.HCC-PARSE-13]
+group = 'HCC-PARSE'
+check = 'Rational text syntax, at the token.'
+message = 'rational text is not in canonical form'
+
+[reject.HCC-PARSE-14]
+group = 'HCC-PARSE'
+check = 'Bit length of a parsed rational, against the cap.'
+message = 'rational exceeds the bit cap'
+
+[reject.HCC-PARSE-15]
+group = 'HCC-PARSE'
+check = 'Declared token length, before reading the rational text.'
+message = 'rational token exceeds the maximum token length'
+
+[reject.HCC-PARSE-16]
+group = 'HCC-PARSE'
+check = 'Element order within an array whose semantics are a set.'
+message = 'set-valued array is unsorted or contains a repeat'
+
+[reject.HCC-PARSE-17]
+group = 'HCC-PARSE'
+check = 'End record counts against the records actually read.'
+message = 'End record counts disagree with the stream'
+
+[reject.HCC-PARSE-18]
+group = 'HCC-PARSE'
+check = 'Declared tree depth against the hard depth cap, before replay.'
+message = 'declared tree depth exceeds the cap'
+
+[reject.HCC-PARSE-19]
+group = 'HCC-PARSE'
+check = 'Running record count against the cap, during the stream.'
+message = 'record count exceeds the cap'
+
+[reject.HCC-PARSE-20]
+group = 'HCC-PARSE'
+check = 'Running byte count against the cap, during the stream.'
+message = 'certificate byte length exceeds the cap'
+
+# ===========================================================================
+# HCC-TRANSFORM — replaying presolve
+# ===========================================================================
+
+[reject.HCC-TRANSFORM-01]
+group = 'HCC-TRANSFORM'
+check = 'Transform rule identifier against the closed list.'
+message = 'unknown transform rule'
+
+[reject.HCC-TRANSFORM-02]
+group = 'HCC-TRANSFORM'
+check = 'Applicability condition, recomputed on the model the verifier holds.'
+message = 'transform is not applicable to the recomputed model'
+
+[reject.HCC-TRANSFORM-03]
+group = 'HCC-TRANSFORM'
+check = 'Canonical hash of the recomputed result against the record.'
+message = 'recomputed model does not match the hash the transform states'
+
+[reject.HCC-TRANSFORM-04]
+group = 'HCC-TRANSFORM'
+check = 'Forward map on the witness points carried by the certificate.'
+message = 'forward map does not preserve feasibility or objective direction'
+
+[reject.HCC-TRANSFORM-05]
+group = 'HCC-TRANSFORM'
+check = 'Reverse map on the witness points carried by the certificate.'
+message = 'reverse map does not restore feasibility with equal objective'
+
+[reject.HCC-TRANSFORM-06]
+group = 'HCC-TRANSFORM'
+check = 'Contradiction derivation, recomputed from the cited row and bounds.'
+message = 'transform contradiction does not follow from the recomputed model'
+
+[reject.HCC-TRANSFORM-07]
+group = 'HCC-TRANSFORM'
+check = 'Record position relative to the Root record.'
+message = 'transform record appears after the root'
+
+[reject.HCC-TRANSFORM-08]
+group = 'HCC-TRANSFORM'
+check = 'Rounding direction on an integer bound derived by the transform.'
+message = 'integer bound was rounded in the wrong direction'
+
+[reject.HCC-TRANSFORM-09]
+group = 'HCC-TRANSFORM'
+check = 'Final chain model hash against the Root reduced model hash.'
+message = 'transform chain does not produce the reduced model the root names'
+
+# ===========================================================================
+# HCC-SCOPE — what a record may cite
+# ===========================================================================
+
+[reject.HCC-SCOPE-01]
+group = 'HCC-SCOPE'
+check = 'Visibility of each cited inequality at the citing node.'
+message = 'cited inequality is not visible at this node'
+
+[reject.HCC-SCOPE-02]
+group = 'HCC-SCOPE'
+check = 'Cited identifier against the citing identifier.'
+message = 'record cites an identifier that does not precede it'
+
+[reject.HCC-SCOPE-03]
+group = 'HCC-SCOPE'
+check = 'Ancestry of the citing node against the cut scope node.'
+message = 'cut is cited outside the subtree it was derived in'
+
+[reject.HCC-SCOPE-04]
+group = 'HCC-SCOPE'
+check = 'Cut scope node against the derivation node.'
+message = 'cut scope node is neither the derivation node nor an ancestor of it'
+
+[reject.HCC-SCOPE-05]
+group = 'HCC-SCOPE'
+check = 'Visibility of each row entering the tableau combination.'
+message = 'tableau combination uses a row not visible at the derivation node'
+
+# ===========================================================================
+# HCC-DUAL — the two linear inference rules
+# ===========================================================================
+
+[reject.HCC-DUAL-01]
+group = 'HCC-DUAL'
+check = 'Sign of each multiplier, before summation.'
+message = 'inference uses a negative multiplier'
+
+[reject.HCC-DUAL-02]
+group = 'HCC-DUAL'
+check = 'Each multiplier against zero, before summation.'
+message = 'inference carries a zero multiplier, which is not canonical'
+
+[reject.HCC-DUAL-03]
+group = 'HCC-DUAL'
+check = 'Recomputed bound against the bound the record states.'
+message = 'claimed bound does not equal its nonnegative inequality combination'
+
+[reject.HCC-DUAL-04]
+group = 'HCC-DUAL'
+check = 'Summed coefficient vector against the reduced objective vector.'
+message = 'multiplied coefficients do not sum to the objective vector'
+
+[reject.HCC-DUAL-05]
+group = 'HCC-DUAL'
+check = 'Summed coefficient vector against zero, for a contradiction.'
+message = 'contradiction coefficients do not sum to zero'
+
+[reject.HCC-DUAL-06]
+group = 'HCC-DUAL'
+check = 'Summed right-hand side, for a contradiction.'
+message = 'contradiction right-hand side sum is not strictly positive'
+
+[reject.HCC-DUAL-07]
+group = 'HCC-DUAL'
+check = 'Existence of each cited inequality identifier.'
+message = 'inference cites an inequality identifier that does not exist'
+
+# ===========================================================================
+# HCC-CUT — cut derivations
+# ===========================================================================
+
+[reject.HCC-CUT-01]
+group = 'HCC-CUT'
+check = 'Reconstructed combination, before applying the formula.'
+message = 'combination does not isolate exactly one integer basic variable'
+
+[reject.HCC-CUT-02]
+group = 'HCC-CUT'
+check = 'Bound state of each nonbasic in the reconstructed equation.'
+message = 'nonbasic variable sits at no finite bound'
+
+[reject.HCC-CUT-03]
+group = 'HCC-CUT'
+check = 'Integrality of the endpoint each integer displacement is measured from.'
+message = 'integer displacement is measured from a non-integral endpoint'
+
+[reject.HCC-CUT-04]
+group = 'HCC-CUT'
+check = 'Fractional part of the right-hand side of the reconstructed equation.'
+message = 'fractional part is not strictly between zero and one'
+
+[reject.HCC-CUT-05]
+group = 'HCC-CUT'
+check = 'Recomputed cut coefficients against the serialized ones.'
+message = 'recomputed Gomory coefficient differs from the coefficient stated'
+
+[reject.HCC-CUT-06]
+group = 'HCC-CUT'
+check = 'Source row weights, capacity, and variable types.'
+message = 'cover source row is not a positive-integer binary knapsack'
+
+[reject.HCC-CUT-07]
+group = 'HCC-CUT'
+check = 'Sum of cover weights against the capacity.'
+message = 'cover weight sum does not strictly exceed the capacity'
+
+[reject.HCC-CUT-08]
+group = 'HCC-CUT'
+check = 'Variable types in the source row.'
+message = 'cover source row contains a variable that is not binary'
+
+[reject.HCC-CUT-09]
+group = 'HCC-CUT'
+check = 'Feasible states in the lifting dynamic program.'
+message = 'lifting has no feasible state, so the variable should have been fixed'
+
+[reject.HCC-CUT-10]
+group = 'HCC-CUT'
+check = 'Sign and integrality of each recomputed lifting coefficient.'
+message = 'lifting coefficient is negative or not an integer'
+
+[reject.HCC-CUT-11]
+group = 'HCC-CUT'
+check = 'Recomputed lifting coefficients against the serialized ones.'
+message = 'recomputed lifting coefficient differs from the coefficient stated'
+
+[reject.HCC-CUT-12]
+group = 'HCC-CUT'
+check = 'Dynamic-program size against the caps, before running it.'
+message = 'lifting exceeds the dynamic-program caps, so only an unlifted cover is admissible'
+
+[reject.HCC-CUT-13]
+group = 'HCC-CUT'
+check = 'Cut family identifier against the closed list.'
+message = 'unknown cut family'
+
+# ===========================================================================
+# HCC-TREE — the recursive cover
+# ===========================================================================
+
+[reject.HCC-TREE-01]
+group = 'HCC-TREE'
+check = 'Integrality declaration of the branching variable.'
+message = 'branch variable is not declared integer'
+
+[reject.HCC-TREE-02]
+group = 'HCC-TREE'
+check = 'Split value at the Branch record.'
+message = 'branch split value is not an exact integer'
+
+[reject.HCC-TREE-03]
+group = 'HCC-TREE'
+check = 'Child identifiers against the nodes already created.'
+message = 'branch child identifier already exists'
+
+[reject.HCC-TREE-04]
+group = 'HCC-TREE'
+check = 'Parent assignment during tree replay.'
+message = 'node has more than one parent'
+
+[reject.HCC-TREE-05]
+group = 'HCC-TREE'
+check = 'Reachability from the root, after replay.'
+message = 'node is not reachable from the root'
+
+[reject.HCC-TREE-06]
+group = 'HCC-TREE'
+check = 'Terminal record presence, after replay.'
+message = 'node is neither branched nor terminated'
+
+[reject.HCC-TREE-07]
+group = 'HCC-TREE'
+check = 'Terminal record count per node, during replay.'
+message = 'node carries more than one terminal record'
+
+[reject.HCC-TREE-08]
+group = 'HCC-TREE'
+check = 'Node of the cited inference against the node of the leaf.'
+message = 'leaf cites an inference made at a different node'
+
+[reject.HCC-TREE-09]
+group = 'HCC-TREE'
+check = 'Reduced point of an integral leaf against the node model.'
+message = 'integral leaf point is not feasible or not integral'
+
+[reject.HCC-TREE-10]
+group = 'HCC-TREE'
+check = 'Objective of the integral leaf point against its cited bound.'
+message = 'integral leaf objective does not equal its cited bound'
+
+[reject.HCC-TREE-11]
+group = 'HCC-TREE'
+check = 'Finiteness of the frontier bound.'
+message = 'frontier leaf has no finite bound'
+
+[reject.HCC-TREE-12]
+group = 'HCC-TREE'
+check = 'Frontier bound against the incumbent objective.'
+message = 'frontier bound is at least the incumbent objective and must be a closed leaf'
+
+[reject.HCC-TREE-13]
+group = 'HCC-TREE'
+check = 'Replay stack depth against the cap.'
+message = 'tree depth exceeds the cap'
+
+[reject.HCC-TREE-14]
+group = 'HCC-TREE'
+check = 'Root reduced model hash against the replayed chain.'
+message = 'root names a reduced model the transform chain does not produce'
+
+# ===========================================================================
+# HCC-POINT — witnesses
+# ===========================================================================
+
+[reject.HCC-POINT-01]
+group = 'HCC-POINT'
+check = 'Exact row activity against each finite row side.'
+message = 'point violates a row side'
+
+[reject.HCC-POINT-02]
+group = 'HCC-POINT'
+check = 'Each component against its finite bounds.'
+message = 'point violates a variable bound'
+
+[reject.HCC-POINT-03]
+group = 'HCC-POINT'
+check = 'Integrality of each component of a variable declared integer.'
+message = 'point is not integral where the model declares integrality'
+
+[reject.HCC-POINT-04]
+group = 'HCC-POINT'
+check = 'Recomputed objective against the claimed value.'
+message = 'recomputed objective differs from the objective claimed'
+
+[reject.HCC-POINT-05]
+group = 'HCC-POINT'
+check = 'Reduced point mapped through the replayed chain against the original point.'
+message = 'original and reduced witnesses do not correspond through the transform chain'
+
+[reject.HCC-POINT-06]
+group = 'HCC-POINT'
+check = 'Vector length against the model dimension.'
+message = 'point dimension does not match the model'
+
+[reject.HCC-POINT-07]
+group = 'HCC-POINT'
+check = 'Record kinds present alongside a point-only claim.'
+message = 'point-only certificate contains a transform, root, or tree record'
+
+# ===========================================================================
+# HCC-RAY — unboundedness
+# ===========================================================================
+
+[reject.HCC-RAY-01]
+group = 'HCC-RAY'
+check = 'Row activity of the direction against each row sense.'
+message = 'direction is not a recession direction of a row'
+
+[reject.HCC-RAY-02]
+group = 'HCC-RAY'
+check = 'Sign of each direction component against the finite bounds.'
+message = 'direction leaves a finite variable bound'
+
+[reject.HCC-RAY-03]
+group = 'HCC-RAY'
+check = 'Objective inner product with the direction.'
+message = 'objective does not strictly improve along the direction'
+
+[reject.HCC-RAY-04]
+group = 'HCC-RAY'
+check = 'Base point against every row and bound of the original model.'
+message = 'ray base point is not feasible'
+
+[reject.HCC-RAY-05]
+group = 'HCC-RAY'
+check = 'Integrality of the base point where declared.'
+message = 'ray base point is not integral where the model declares integrality'
+
+[reject.HCC-RAY-06]
+group = 'HCC-RAY'
+check = 'Presence and sign of the integer step, for a mixed-integer claim.'
+message = 'mixed-integer ray has no positive integer step'
+
+[reject.HCC-RAY-07]
+group = 'HCC-RAY'
+check = 'Integrality of the stepped direction on each integer variable.'
+message = 'stepped direction is not integral on an integer variable'
+
+[reject.HCC-RAY-08]
+group = 'HCC-RAY'
+check = 'Record kinds present alongside a ray claim.'
+message = 'ray certificate contains a transform, root, or tree record'
+
+# ===========================================================================
+# HCC-CLAIM — closure
+# ===========================================================================
+
+[reject.HCC-CLAIM-01]
+group = 'HCC-CLAIM'
+check = 'Header claim kind against the Claim record.'
+message = 'header claim kind differs from the claim record'
+
+[reject.HCC-CLAIM-02]
+group = 'HCC-CLAIM'
+check = 'Recomputed closure against the claimed status.'
+message = 'the records present do not close the claimed status'
+
+[reject.HCC-CLAIM-03]
+group = 'HCC-CLAIM'
+check = 'Presence of the witness records the claim requires.'
+message = 'a witness record the claim requires is missing'
+
+[reject.HCC-CLAIM-04]
+group = 'HCC-CLAIM'
+check = 'Leaf kinds present, for an optimal claim.'
+message = 'optimal claim has an open frontier leaf'
+
+[reject.HCC-CLAIM-05]
+group = 'HCC-CLAIM'
+check = 'Each closed leaf bound against the incumbent objective.'
+message = 'optimal claim has a leaf bound below the incumbent objective'
+
+[reject.HCC-CLAIM-06]
+group = 'HCC-CLAIM'
+check = 'Frontier leaf presence, for a gap claim.'
+message = 'gap claim has no open frontier leaf'
+
+[reject.HCC-CLAIM-07]
+group = 'HCC-CLAIM'
+check = 'Recomputed L against U, for a gap claim.'
+message = 'gap claim lower bound is not strictly below the incumbent objective'
+
+[reject.HCC-CLAIM-08]
+group = 'HCC-CLAIM'
+check = 'Recomputed gap against the stated gap.'
+message = 'recomputed gap differs from the gap stated'
+
+[reject.HCC-CLAIM-09]
+group = 'HCC-CLAIM'
+check = 'Leaf kinds present, for an infeasible claim.'
+message = 'infeasible claim has a leaf that is not a contradiction'
+
+[reject.HCC-CLAIM-10]
+group = 'HCC-CLAIM'
+check = 'Claim kind against the record kinds present.'
+message = 'claim kind is not permitted with the records present'

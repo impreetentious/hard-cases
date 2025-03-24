@@ -1,0 +1,186 @@
+<!--
+  Generated from spec/v1 by scripts/gen-docs.mjs. Do not edit.
+  The assets are the specification; this page is a rendering of them.
+-->
+# Presolve transforms v1
+
+The eight closed transforms, their applicability conditions, and their forward and reverse maps.
+
+## `[invariant]`
+
+- **forward** — Every feasible point of the model before the transform maps forward to a feasible point of the model after it, with objective no greater in the minimization sense.
+- **reverse** — Every feasible point of the model after the transform has a deterministic reverse lift to a feasible point of the model before it, with exactly equal objective.
+- **consequence** — Together these give equal optima. A lower bound or a contradiction proved on the final reduced model therefore proves the same about the original, and a reduced incumbent lifts to an original incumbent of the same value.
+- **hashes** — Each record carries the canonical hash of the model it produces. The hash binds the stages together; it never substitutes for the two checks above, which are what make the step true.
+- **recomputation** — The verifier computes the resulting model itself. Coefficients the record states about the result are compared against that computation and are otherwise inert.
+- **traps** —
+  - trap_transform_after_data_not_trusted
+  - trap_postsolve_restores_exactly
+  - trap_presolve_contradiction_replayed
+
+## `[ordering]`
+
+- **fixpoint** — T1, T2, T3, T4, T5, T6, T7, T8, each scanning candidates in ascending stable identifier order. After any change, restart at T1.
+- **termination** — Each transform strictly removes a row or a column, or strictly tightens a bound. Bound tightening is subject to the applicability conditions of T7, which require a strict improvement, so the fixpoint terminates.
+- **determinism** — The order is fixed so that the chain is reproducible. Proof correctness does not depend on it: any chain whose records satisfy the invariants is valid, in any order.
+
+## `[contradiction]`
+
+- **rule** — A transform deriving an empty domain, whether an empty bound intersection or a row whose derived lower bound exceeds its derived upper bound, ends the chain with a TransformContradiction naming the source row and bound identifiers.
+- **recomputation** — The verifier recomputes that derivation on the model it holds. There is no free-form presolve witness and no rule accepting an assertion that the model was found infeasible.
+
+## `[excluded]`
+
+- **rules** —
+  - general dominated-column deletion
+  - binary coefficient strengthening
+  - probing
+  - symmetry detection
+  - proportional-column aggregation
+- **reason** — Each of these is genuinely useful and none of them has a witness that survives being written down as an exact recomputable equivalence. They are excluded from v1 rather than included with a hand-wave, and T8 is deliberately the narrow exactly-identical-column case rather than a general aggregation.
+
+## `[transform.t1]`
+
+- **id** — T1
+- **name** — FixedColumn
+- **parameters** — The column index j and the exact value v.
+- **applicable** — The effective lower and upper bounds of column j are both exactly v, and v is an exact integer when the column is declared integer.
+- **action** — Substitute a_ij times v into every finite side of every row containing j, add c_j times v to the objective constant, and delete the column.
+- **forward** — Drop the component for j, which the applicability condition fixes to v anyway.
+- **reverse** — Insert the value v at position j.
+- **fixtures** —
+  - positive
+  - just outside applicability with unequal bounds
+  - noninteger value on an integer column
+  - tampered reverse map
+
+## `[transform.t2]`
+
+- **id** — T2
+- **name** — EmptyColumn
+- **parameters** — The column index j and the chosen value v.
+- **applicable** — Column j has no nonzero coefficient in any row, and the endpoint selected below exists and is finite.
+- **selection** — If the objective coefficient is zero and zero lies within the bounds, v is zero. Otherwise, for a positive objective coefficient v is the finite effective lower endpoint, and for a negative objective coefficient v is the finite effective upper endpoint. Integer columns use the ceiling of the lower bound and the floor of the upper bound.
+- **inapplicable** — If the improving endpoint is missing because the relevant bound is infinite, the transform does not apply and the column is retained. The solve must then establish both a feasible original point and a ray, rather than presolve quietly deciding the model is unbounded.
+- **action** — Fix the column to v and delete it, adding c_j times v to the objective constant.
+- **forward** — Replace whatever value the point held at j by v, which cannot worsen the objective.
+- **reverse** — Insert the value v at position j.
+- **traps** —
+  - trap_empty_column_mip_ray
+- **fixtures** —
+  - positive with a zero objective
+  - positive with a nonzero objective and a finite endpoint
+  - inapplicable with an infinite improving endpoint
+  - integer rounding of the chosen endpoint
+
+## `[transform.t3]`
+
+- **id** — T3
+- **name** — SingletonRow
+- **parameters** — The row index i and the column index j.
+- **applicable** — Row i has exactly one nonzero coefficient a_ij, which is nonzero.
+- **action** — Divide both finite row sides by a_ij, swapping the sides when a_ij is negative, round the derived bounds inward with a ceiling on the lower and a floor on the upper when the column is integer, intersect the result with the existing bounds of column j, and delete the row.
+- **contradiction** — An empty intersection produces a TransformContradiction referencing this computation.
+- **forward** — The identity on variables; only the row disappears.
+- **reverse** — The identity on variables.
+- **traps** —
+  - trap_integer_round_direction
+  - trap_bound_tighten_sound
+- **fixtures** —
+  - positive with a positive coefficient
+  - positive with a negative coefficient and swapped sides
+  - integer rounding in both directions
+  - empty intersection producing a contradiction
+
+## `[transform.t4]`
+
+- **id** — T4
+- **name** — FreeSingletonColumn
+- **parameters** — The row index i and the column index j.
+- **applicable** — Column j is continuous, both of its bounds are infinite, it appears with a nonzero coefficient in exactly one row, and that row is an equality.
+- **action** — Substitute x_j = (b_i - sum over k not equal to j of a_ik x_k) / a_ij into the objective, then delete both the row and the column.
+- **forward** — Drop the component for j.
+- **reverse** — Evaluate the substitution expression at the lifted point to recover x_j.
+- **inapplicable** — A ranged row rather than an equality, an integer column, or a column with any finite bound. Each of these makes the substitution a restriction rather than an equivalence.
+- **fixtures** —
+  - positive
+  - ranged row rejected
+  - integer column rejected
+  - finite bound rejected
+
+## `[transform.t5]`
+
+- **id** — T5
+- **name** — RedundantRow
+- **parameters** — The row index i.
+- **applicable** — The exact minimum and maximum activities of the row, computed from the current finite variable bounds, satisfy the row: the minimum is at least the finite lower side and the maximum is at most the finite upper side. A side that is absent imposes no requirement.
+- **inapplicable** — Any variable in the row with an infinite bound on the side needed for the relevant extremum. The extremum is then unbounded and the implication cannot be established.
+- **action** — Delete the row.
+- **forward** — The identity; the deleted row was satisfied by every point that satisfied the rest.
+- **reverse** — The identity.
+- **note** — Duplicate and weaker rows with the same pattern qualify only through this check. There is no separate duplicate-row rule, because a duplicate-row rule with a subtly different applicability condition is a second chance to be wrong.
+- **fixtures** —
+  - positive on both sides
+  - just outside on the lower side
+  - inapplicable with an infinite contributor
+
+## `[transform.t6]`
+
+- **id** — T6
+- **name** — ForcingRow
+- **parameters** — The row index i, the forcing side, and the list of resulting fixes.
+- **applicable** — For a lower side, its right-hand side equals the exact maximum activity of the row. For an upper side, it equals the exact minimum activity. Every endpoint contributing to that extremum must be finite and effective.
+- **action** — On a lower side at the maximum activity, every variable with a positive coefficient is fixed at its upper endpoint and every variable with a negative coefficient at its lower endpoint. On an upper side at the minimum activity, the assignment is reversed. Apply those bound intersections; the deletions themselves are then performed by ordinary T1 records.
+- **forward** — The identity; the applicability condition means no feasible point could have had any other value.
+- **reverse** — The identity.
+- **note** — Splitting the fixes out into T1 records rather than deleting inside T6 keeps one deletion mechanism in the chain, so the reverse lift has one shape to test.
+- **fixtures** —
+  - positive on a lower side
+  - positive on an upper side
+  - just outside applicability with slack
+  - inapplicable with an infinite endpoint
+
+## `[transform.t7]`
+
+- **id** — T7
+- **name** — TightenBound
+- **parameters** — The row index i, the column index j, the side of the bound, and the new bound value.
+- **applicable** — The recomputed bound is strictly tighter than the current one, and the residual extremum it is derived from is finite.
+- **action** — From a row upper side a dot x <= U, take the minimum residual activity of all terms other than j; from a row lower side a dot x >= L, take the maximum residual. Divide by a_ij, flipping the side when a_ij is negative, and intersect with the existing bound of column j. An integer column rounds a derived lower bound up and a derived upper bound down.
+- **forward** — The identity; the applicability condition means no feasible point violated the new bound.
+- **reverse** — The identity.
+- **payload_note** — The record may list contributor bound identifiers, but they are diagnostic only. The verifier selects the contributors itself, because a record that chose them would be choosing which residual it was checked against.
+- **traps** —
+  - trap_bound_tighten_sound
+  - trap_integer_round_direction
+- **fixtures** —
+  - positive with a positive coefficient
+  - positive with a negative coefficient and flipped side
+  - integer rounding in both directions
+  - no strict improvement rejected
+
+## `[transform.t8]`
+
+- **id** — T8
+- **name** — DuplicateColumnAggregate
+- **parameters** — The retained column j and the dropped column k.
+- **applicable** — Columns j and k have exactly identical coefficient vectors across every row, exactly equal objective coefficients, the same continuous or integer type, and all four bounds finite.
+- **action** — Replace them with a single column s whose value is x_j + x_k, whose bounds are the sums of the corresponding bounds, and whose coefficients and objective coefficient are those the two columns shared.
+- **forward** — Set s to x_j + x_k and drop both components.
+- **reverse** — Deterministically set x_j to s - l_k clamped into the interval from l_j to u_j, then set x_k to s - x_j.
+- **integrality** — For integer columns every quantity in the reverse map, including the clamp, is integral, so the lifted point is integral by construction rather than by rounding.
+- **binary_note** — Two binary columns aggregate into a general integer column with bounds 0 and 2. Retaining it as binary would drop the feasible point where both were one.
+- **scope_note** — Exactly identical columns only. Proportional columns and dominated columns are not aliases of this rule and are excluded from v1.
+- **traps** —
+  - trap_duplicate_column_split_integral
+- **fixtures** —
+  - positive on continuous columns
+  - positive on binary columns producing a general integer
+  - differing objective coefficient rejected
+  - infinite bound rejected
+  - reverse-map lift on every integer value of s
+
+## `[postsolve]`
+
+- **requirement** — The certificate carries both the reduced incumbent and the original-space incumbent. The verifier maps the reduced point forward through the replayed chain and checks the original point against the original model independently, then checks that the two objectives are exactly equal.
+- **never_patched** — A postsolve discrepancy is a defect in the transform that produced it. Adjusting the lift to compensate for a forward map that was already wrong hides the defect and leaves the invariant broken.
