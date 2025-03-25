@@ -1,0 +1,36 @@
+hc-canonical 1
+format 1
+digest 697801e90aabe574a1223ccd07633c2507894f3870d6b2e31e485bf8aed35f6b
+sense min original=min
+objconst 0
+counts vars=1 rows=7 nonzeros=7 ineqs=14
+var 0 C * * 1 X
+row 0 10 14 R1
+row 1 10 14 R2
+row 2 6 10 R3
+row 3 6 10 R4
+row 4 10 14 R5
+row 5 6 10 R6
+row 6 10 10 R7
+nz 0 0 1
+nz 0 1 1
+nz 0 2 1
+nz 0 3 1
+nz 0 4 1
+nz 0 5 1
+nz 0 6 1
+ineq 0 row 0 lower
+ineq 1 row 0 upper
+ineq 2 row 1 lower
+ineq 3 row 1 upper
+ineq 4 row 2 lower
+ineq 5 row 2 upper
+ineq 6 row 3 lower
+ineq 7 row 3 upper
+ineq 8 row 4 lower
+ineq 9 row 4 upper
+ineq 10 row 5 lower
+ineq 11 row 5 upper
+ineq 12 row 6 lower
+ineq 13 row 6 upper
+end

@@ -1,0 +1,328 @@
+# Hand-worked transform vectors, version 1.
+#
+# Each of the eight transforms gets a positive case, a case just outside its
+# applicability condition, an integer-rounding case where rounding direction is
+# observable, and a contradiction case where one exists. The just-outside cases
+# do most of the work: a transform that fires when it should not is how a
+# presolve chain quietly changes the model a proof is about.
+
+[meta]
+version = 1
+title = 'Hand-worked transform vectors v1'
+summary = 'Positive, just-outside, rounding, and contradiction vectors for T1 through T8.'
+
+# ---------------------------------------------------------------------------
+# T1 FixedColumn
+# ---------------------------------------------------------------------------
+
+[t1.positive]
+rule = 'T1'
+model = 'minimize 4x + y subject to 2x + y <= 10, x in [3,3], y in [0,10]'
+parameters = 'j = x, v = 3'
+verdict = 'accept'
+result = 'minimize y + 12 subject to y <= 4, y in [0,10]'
+working = 'The bounds are exactly equal so the column is fixed. Two times 3 leaves the row as y <= 4, and four times 3 becomes an objective constant of 12. The reverse lift inserts 3 at the position of x.'
+
+[t1.not_fixed]
+rule = 'T1'
+model = 'minimize 4x + y subject to 2x + y <= 10, x in [3,4], y in [0,10]'
+parameters = 'j = x, v = 3'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The bounds are not equal, so the substitution discards feasible points. This is the vector for a transform whose applicability condition is checked on the recomputed model rather than taken from the record.'
+
+[t1.noninteger_value]
+rule = 'T1'
+model = 'minimize x subject to x in [5/2, 5/2], x integer'
+parameters = 'j = x, v = 5/2'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The bounds agree but the value is not an integer and the column is declared integer. The model is infeasible, and saying so is the job of a contradiction record rather than of a fix.'
+
+# ---------------------------------------------------------------------------
+# T2 EmptyColumn
+# ---------------------------------------------------------------------------
+
+[t2.positive_zero_objective]
+rule = 'T2'
+model = 'minimize y subject to y <= 10, z in [-5, 5] with no row coefficient and objective coefficient 0'
+parameters = 'j = z, v = 0'
+verdict = 'accept'
+working = 'The objective coefficient is zero and zero lies within the bounds, so the deterministic choice is zero and the objective constant is unchanged.'
+
+[t2.positive_improving_endpoint]
+rule = 'T2'
+model = 'minimize 2z subject to no row contains z, z in [1, 5]'
+parameters = 'j = z, v = 1'
+verdict = 'accept'
+working = 'A positive objective coefficient wants the smallest value, which is the finite lower endpoint 1. The objective constant gains 2.'
+
+[t2.integer_endpoint]
+rule = 'T2'
+model = 'minimize 2z subject to no row contains z, z in [1/2, 5], z integer'
+parameters = 'j = z, v = 1'
+verdict = 'accept'
+working = 'The effective lower endpoint of an integer column is the ceiling of 1/2, which is 1. Choosing 1/2 would fix an integer column to a fractional value.'
+
+[t2.missing_endpoint]
+rule = 'T2'
+model = 'minimize 2z subject to no row contains z, z in (-infinity, 5]'
+parameters = 'j = z'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'There is no finite improving endpoint, so the transform does not apply and the column is retained. Deleting it here would be presolve deciding the model is unbounded, which is a claim requiring a feasible point and a ray rather than a reduction.'
+trap = 'trap_empty_column_mip_ray'
+
+# ---------------------------------------------------------------------------
+# T3 SingletonRow
+# ---------------------------------------------------------------------------
+
+[t3.positive]
+rule = 'T3'
+model = 'row 2x <= 7, x in [0, 10] continuous'
+parameters = 'i = the row, j = x'
+verdict = 'accept'
+result = 'x in [0, 7/2], the row deleted'
+working = 'Dividing the upper side by the positive coefficient 2 gives 7/2, which is tighter than 10.'
+
+[t3.integer_floor]
+rule = 'T3'
+model = 'row 2x <= 7, x in [0, 10] integer'
+parameters = 'i = the row, j = x'
+verdict = 'accept'
+result = 'x in [0, 3], the row deleted'
+working = 'The derived upper bound 7/2 rounds down to 3 for an integer column. Rounding up to 4 would admit x = 4, whose row activity is 8 and violates the row.'
+trap = 'trap_integer_round_direction'
+
+[t3.negative_coefficient]
+rule = 'T3'
+model = 'row -2x <= 7, x in [-10, 10] integer'
+parameters = 'i = the row, j = x'
+verdict = 'accept'
+result = 'x in [-3, 10], the row deleted'
+working = 'Dividing by a negative coefficient swaps the side, so an upper side becomes a lower bound of -7/2, which rounds up to -3 for an integer column. Both the swap and the rounding direction reverse here, and an implementation that reverses only one of them passes the previous vector and fails this one.'
+
+[t3.contradiction]
+rule = 'T3'
+model = 'row 2x >= 9, x in [0, 4] integer'
+parameters = 'i = the row, j = x'
+verdict = 'accept_contradiction'
+working = 'The derived lower bound is 9/2, which rounds up to 5 for an integer column, and 5 exceeds the existing upper bound of 4. The chain ends with a transform contradiction naming this row and this bound, and the verifier recomputes the derivation rather than accepting the assertion.'
+trap = 'trap_presolve_contradiction_replayed'
+
+[t3.not_singleton]
+rule = 'T3'
+model = 'row 2x + y <= 7, x in [0, 10], y in [0, 10]'
+parameters = 'i = the row, j = x'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The row has a second nonzero, so the derived bound would ignore the contribution of y and could be far too tight.'
+
+# ---------------------------------------------------------------------------
+# T4 FreeSingletonColumn
+# ---------------------------------------------------------------------------
+
+[t4.positive]
+rule = 'T4'
+model = 'minimize x + 3y subject to x + 2y = 10, x in [0,10], y free continuous and appearing in no other row'
+parameters = 'i = the equality row, j = y'
+verdict = 'accept'
+result = 'minimize x + 3(10 - x)/2 = 15 - x/2 over x in [0,10], the row and column deleted'
+working = 'The equality is solved for y and substituted into the objective. The reverse lift evaluates (10 - x)/2 at the lifted point.'
+
+[t4.ranged_row]
+rule = 'T4'
+model = 'minimize x + 3y subject to 8 <= x + 2y <= 10, y free continuous'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'A ranged row does not determine y, so the substitution restricts the feasible set rather than preserving it.'
+
+[t4.bounded_column]
+rule = 'T4'
+model = 'minimize x + 3y subject to x + 2y = 10, y in [0, infinity) continuous'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'A finite bound on y is a constraint the substitution would silently drop. Only a genuinely free column may be eliminated this way.'
+
+[t4.integer_column]
+rule = 'T4'
+model = 'minimize x + 3y subject to x + 2y = 10, y free integer'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'Substituting an integer column turns its integrality into a divisibility condition on the remaining variables, which the reduced model has no way to express.'
+
+# ---------------------------------------------------------------------------
+# T5 RedundantRow
+# ---------------------------------------------------------------------------
+
+[t5.positive]
+rule = 'T5'
+model = 'row x + y >= 0, x in [0,10], y in [0,10]'
+verdict = 'accept'
+working = 'The exact minimum activity is 0, which is at least the lower side of 0. There is no upper side to check, so the row is implied and is deleted.'
+
+[t5.just_outside]
+rule = 'T5'
+model = 'row x + y >= 1, x in [0,10], y in [0,10]'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The minimum activity is 0, which is below the lower side of 1. The row excludes the origin and deleting it would enlarge the feasible set.'
+
+[t5.infinite_contributor]
+rule = 'T5'
+model = 'row x + y >= 0, x in [0,10], y in (-infinity, 10]'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The minimum activity is unbounded below, so no implication can be established. An implementation treating an infinite contributor as a large finite number deletes a row that constrains the model.'
+
+[t5.duplicate_row]
+rule = 'T5'
+model = 'rows x + y <= 10 and x + y <= 12, x in [0,10], y in [0,10]'
+verdict = 'accept'
+working = 'The weaker of two identical patterns qualifies through the ordinary activity check, with the maximum activity computed against the bounds tightened by the stronger row. There is no separate duplicate-row rule, because a second rule with a subtly different applicability condition is a second chance to be wrong.'
+
+# ---------------------------------------------------------------------------
+# T6 ForcingRow
+# ---------------------------------------------------------------------------
+
+[t6.positive_lower_side]
+rule = 'T6'
+model = 'row x + y >= 20, x in [0,10], y in [0,10]'
+verdict = 'accept'
+result = 'x fixed at 10 and y fixed at 10, by ordinary T1 records following this one'
+working = 'The maximum activity is exactly 20, which equals the lower side. Every point satisfying the row must attain that maximum, so each positive coefficient forces its variable to its upper endpoint.'
+
+[t6.positive_upper_side]
+rule = 'T6'
+model = 'row x - y <= -10, x in [0,10], y in [0,10]'
+verdict = 'accept'
+result = 'x fixed at 0 and y fixed at 10'
+working = 'The minimum activity is -10, which equals the upper side. On an upper side the assignment reverses: positive coefficients take their lower endpoints and negative coefficients their upper ones.'
+
+[t6.slack]
+rule = 'T6'
+model = 'row x + y >= 19, x in [0,10], y in [0,10]'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The maximum activity is 20 and the lower side is 19, so the row is satisfiable without fixing anything. Firing here would delete the feasible point where x is 9 and y is 10.'
+
+[t6.infinite_endpoint]
+rule = 'T6'
+model = 'row x + y >= 20, x in [0, infinity), y in [0,10]'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The maximum activity is unbounded, so it cannot equal the lower side and no endpoint is forced.'
+
+# ---------------------------------------------------------------------------
+# T7 TightenBound
+# ---------------------------------------------------------------------------
+
+[t7.positive]
+rule = 'T7'
+model = 'row 3x + 2y <= 12, x in [0,10], y in [0,10]'
+parameters = 'i = the row, j = x, side = upper'
+verdict = 'accept'
+result = 'x upper bound becomes 4'
+working = 'The minimum residual activity of the other terms is 2 times 0, which is 0. So 3x is at most 12 and x is at most 4, which improves on 10.'
+
+[t7.integer_rounding]
+rule = 'T7'
+model = 'row 3x + 2y <= 13, x in [0,10] integer, y in [0,10]'
+parameters = 'i = the row, j = x, side = upper'
+verdict = 'accept'
+result = 'x upper bound becomes 4'
+working = 'The derived bound is 13/3, which rounds down to 4 for an integer column. Rounding up to 5 would admit an activity of 15 against a capacity of 13.'
+trap = 'trap_bound_tighten_sound'
+
+[t7.negative_coefficient]
+rule = 'T7'
+model = 'row -3x + 2y <= 12, x in [-10,10] integer, y in [0,10]'
+parameters = 'i = the row, j = x, side = lower'
+verdict = 'accept'
+result = 'x lower bound becomes -4'
+working = 'The minimum residual is 0, giving -3x at most 12, and dividing by the negative coefficient flips the side to x at least -4. The derived lower bound rounds up, which for -4 exactly is -4.'
+
+[t7.no_improvement]
+rule = 'T7'
+model = 'row 3x + 2y <= 60, x in [0,10], y in [0,10]'
+parameters = 'i = the row, j = x, side = upper'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The derived bound is 20, which is weaker than the existing bound of 10. A transform that records no improvement is either a mistake or a way to pad a chain, and neither is worth admitting.'
+
+[t7.wrong_residual]
+rule = 'T7'
+model = 'row 3x + 2y <= 12, x in [0,10], y in [2,10]'
+parameters = 'i = the row, j = x, side = upper'
+claimed_bound = '4'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-03'
+working = 'With y at least 2 the minimum residual is 4, so the derived bound is 8/3 and not 4. The record states a bound derived against the wrong residual, and the verifier selects the contributors itself precisely so a record cannot choose the residual it is checked against.'
+
+# ---------------------------------------------------------------------------
+# T8 DuplicateColumnAggregate
+# ---------------------------------------------------------------------------
+
+[t8.positive_continuous]
+rule = 'T8'
+model = 'minimize 2x + 2y subject to x + y <= 5, x in [0,3] and y in [0,4] both continuous'
+parameters = 'keep = x, drop = y'
+verdict = 'accept'
+result = 'a single column s in [0,7] with objective coefficient 2 and row coefficient 1'
+working = 'The columns are identical in every row and in the objective, so only their sum matters. The reverse lift sets x to s clamped into [0,3] and y to s minus x.'
+
+[t8.positive_binary]
+rule = 'T8'
+model = 'minimize x + y subject to 3x + 3y <= 5, x and y both binary'
+parameters = 'keep = x, drop = y'
+verdict = 'accept'
+result = 'a single general integer column s in [0,2]'
+working = 'Two binaries aggregate to a general integer with bounds 0 and 2. Keeping s binary would drop the point where both were one, which is a feasible point of the original whenever the row admits it.'
+reverse_map = ['s = 0 lifts to x = 0, y = 0', 's = 1 lifts to x = 1, y = 0', 's = 2 lifts to x = 1, y = 1']
+trap = 'trap_duplicate_column_split_integral'
+
+[t8.differing_objective]
+rule = 'T8'
+model = 'minimize 2x + 3y subject to x + y <= 5, x and y in [0,3] continuous'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The objective coefficients differ, so the sum does not determine the objective value and the aggregation is not an equivalence.'
+
+[t8.infinite_bound]
+rule = 'T8'
+model = 'minimize 2x + 2y subject to x + y <= 5, x in [0,3] and y in [0, infinity) continuous'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'With an infinite bound the deterministic reverse split has no well-defined clamp, and the summed bound is not the bound of the aggregate.'
+
+[t8.proportional_not_identical]
+rule = 'T8'
+model = 'minimize 2x + 4y subject to x + 2y <= 5, x and y in [0,3] continuous'
+verdict = 'reject'
+id = 'HCC-TRANSFORM-02'
+working = 'The columns are proportional but not identical. Proportional aggregation is a different and more delicate rule, it is not an alias of this one, and it is excluded from v1.'
+
+# ---------------------------------------------------------------------------
+# Chain-level invariants
+# ---------------------------------------------------------------------------
+
+[chain.after_data_not_trusted]
+verdict = 'reject'
+id = 'HCC-TRANSFORM-03'
+working = 'A record whose stated resulting coefficients differ from the recomputed ones is rejected even when the applicability condition holds and the forward and reverse maps are correct. The result of a transform is computed, never read.'
+trap = 'trap_transform_after_data_not_trusted'
+
+[chain.root_hash_mismatch]
+verdict = 'reject'
+id = 'HCC-TRANSFORM-09'
+working = 'A chain that replays cleanly but does not end at the reduced model the root names is rejected. Otherwise a proof about one reduced model could be attached to a chain producing another.'
+
+[chain.transform_after_root]
+verdict = 'reject'
+id = 'HCC-TRANSFORM-07'
+working = 'A transform record appearing after the root would change the model the tree is about, partway through the tree.'
+
+[chain.reverse_lift_exact]
+verdict = 'accept'
+working = 'Over random chains, every reduced feasible point lifts to an original feasible point with exactly equal objective. This is checked as a property over generated chains rather than as a single vector, because the failure mode is a rare combination of transforms rather than a single wrong rule.'
+trap = 'trap_postsolve_restores_exactly'

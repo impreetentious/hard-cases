@@ -1,0 +1,21 @@
+hc-canonical 1
+format 1
+digest 8cc68c6b3214f996502e8a650ae89d69b046ec044d8f0d69f951050cccd0009c
+sense min original=min
+objconst -5
+counts vars=2 rows=2 nonzeros=2 ineqs=7
+var 0 C 0 5/2 1/10 X
+var 1 I 0 1 -5/2 Y
+row 0 1 * R1
+row 1 300 300 R2
+nz 0 1 150
+nz 1 0 2
+zerosum 0 0
+ineq 0 row 0 lower
+ineq 1 row 1 lower
+ineq 2 row 1 upper
+ineq 3 var 0 lower
+ineq 4 var 0 upper
+ineq 5 var 1 lower
+ineq 6 var 1 upper
+end
