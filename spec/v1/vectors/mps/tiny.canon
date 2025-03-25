@@ -1,0 +1,13 @@
+hc-canonical 1
+format 1
+digest b4e79af6380a28d64f5664980bb3d252b7d45ce527ddc7eeeab2e0db160dce8d
+sense min original=min
+objconst 0
+counts vars=1 rows=1 nonzeros=1 ineqs=3
+var 0 I 0 10 -1 X
+row 0 * 4 C1
+nz 0 0 1
+ineq 0 row 0 upper
+ineq 1 var 0 lower
+ineq 2 var 0 upper
+end
