@@ -6,5 +6,17 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+# The exact arithmetic sits beneath the shared vocabulary rather than above it.
+# The canonical model is made of exact rationals, so the crate that defines the
+# model has to be able to name one; arithmetic, for its part, has no reason to
+# know that instances exist. ADR-0005 records the reversal and why.
+[dependencies]
+hc-exact = { path = "../hc-exact" }
+
+# The vector harness reads the normative assets with the reader defined here.
+# That is a development edge in the other direction, which the package manager
+# permits and which does not exist in any shipped artifact.
+[dev-dependencies]
+
 [lints]
 workspace = true

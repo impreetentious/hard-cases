@@ -4,11 +4,14 @@ version = 4
 
 [[package]]
 name = "hc-core"
-version = "0.2.0"
+version = "0.2.1"
+dependencies = [
+ "hc-exact",
+]
 
 [[package]]
 name = "hc-exact"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "hc-core",
 ]

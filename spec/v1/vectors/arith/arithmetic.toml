@@ -211,8 +211,15 @@ covers = 'A rational whose numerator and denominator are both above the Karatsub
 op = 'compare'
 a = '355/113'
 b = '22/7'
+result = 'less'
+covers = 'Two close approximations of the same irrational, three decimal places apart. Cross-multiplication gives 2485 against 2486, so the better approximation is the smaller number. Mental arithmetic gets this backwards more often than not, which is why the pair is pinned here.'
+
+[rational.compare_beyond_binary64]
+op = 'compare'
+a = '9007199254740993/9007199254740992'
+b = '1'
 result = 'greater'
-covers = 'Two close approximations of the same irrational. Comparing them by cross-multiplication is exact; comparing them as floats is not, and the two disagree.'
+covers = 'One plus two to the minus fifty-third against one. Both operands round to the same binary64, so a comparison that goes through a float calls them equal; cross-multiplication says the first is strictly larger. This is the pair that separates an exact comparison from a rounded one.'
 
 [decimal.one_tenth]
 text = '0.1'

@@ -17,6 +17,7 @@
 
 pub mod dec;
 pub mod div;
+pub mod float;
 pub mod gcd;
 pub mod int;
 pub mod mul;

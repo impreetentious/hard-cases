@@ -15,6 +15,20 @@
 //! compared, they are compared against the same inert vectors under `spec/` —
 //! neither is generated from the other, and neither is the other's oracle.
 
+pub mod claim;
+pub mod hash;
+pub mod ids;
+pub mod model;
+pub mod reject;
+pub mod rng;
+pub mod spec;
 pub mod tol;
 
+pub use claim::{Claim, NoProgressReason};
+pub use hash::{Crc32c, Sha256, crc32c, hex, instance_digest, sha256};
+pub use ids::{FormatTag, IneqId, RowId, Sense, Side, VarId};
+pub use model::{IneqSource, Inequality, Matrix, Model, ModelParts, Row, RowMajor, Variable};
+pub use reject::{Refusal, Rejection};
+pub use rng::{SplitMix64, Xoshiro256PlusPlus};
+pub use spec::{SpecDocument, SpecError, SpecReason, SpecTable, SpecValue};
 pub use tol::Tol;
