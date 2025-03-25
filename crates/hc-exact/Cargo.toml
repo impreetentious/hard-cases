@@ -1,0 +1,17 @@
+[package]
+name = "hc-exact"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# The vector harness needs the asset reader, and only the harness needs it.
+# Keeping the edge in the dev table means the library itself still compiles
+# with nothing beneath it, which is the property the arithmetic stack is
+# supposed to have.
+[dev-dependencies]
+hc-core = { path = "../hc-core" }
