@@ -16,6 +16,7 @@
 //! neither is generated from the other, and neither is the other's oracle.
 
 pub mod claim;
+pub mod dump;
 pub mod hash;
 pub mod ids;
 pub mod model;
