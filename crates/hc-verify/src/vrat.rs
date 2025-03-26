@@ -276,13 +276,13 @@ impl Frac {
 
 impl fmt::Display for Frac {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_whole() { formatter.write_str(&self.top().to_decimal()) } else { write!(formatter, "{}/{}", self.top().to_decimal(), self.bottom().to_decimal()) }
+        formatter.write_str(&self.to_canonical())
     }
 }
 
 impl fmt::Debug for Frac {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "Frac({self})")
+        write!(formatter, "Frac({})", self.to_canonical())
     }
 }
 

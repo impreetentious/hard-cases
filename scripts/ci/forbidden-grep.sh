@@ -104,12 +104,62 @@ if [[ -d crates/hc-verify ]]; then
     fi
   fi
 
+  # A test inside the crate imports the crate; that is not a boundary
+  # crossing, and the exemption below names exactly that one crate and nothing
+  # else. Everything beginning `hc_` and spelled otherwise is still refused.
   imports="$(grep -rnE --include='*.rs' '\b(use|extern crate)[[:space:]]+hc_' crates/hc-verify/ 2>/dev/null \
-    | grep -vE ':[0-9]+:[[:space:]]*(//|/\*|\*)' || true)"
+    | grep -vE ':[0-9]+:[[:space:]]*(//|/\*|\*)' \
+    | grep -vE '\b(use|extern crate)[[:space:]]+hc_verify\b' || true)"
   if [[ -n "$imports" ]]; then
     echo "forbidden: hc-verify imports a workspace crate"
     echo "$imports" | sed 's/^/  /'
     status=1
+  fi
+
+  # The manifest and the source can both be clean while the resolved graph is
+  # not: a dependency can arrive through a feature, a target-specific table, or
+  # a patch. This asks the resolver instead of the text, and the answer must be
+  # the crate alone. Development and build edges are included, because a
+  # verifier whose test harness pulls in the solver is a verifier whose vectors
+  # were checked by the code they are meant to check.
+  if command -v cargo >/dev/null 2>&1; then
+    tree="$(cargo tree --offline --quiet --package hc-verify --edges normal,build,dev --prefix none 2>/dev/null \
+      | sed '/^[[:space:]]*$/d' || true)"
+    if [[ -z "$tree" ]]; then
+      echo "forbidden: hc-verify dependency graph could not be resolved; the isolation check would be vacuous"
+      status=1
+    else
+      extra="$(printf '%s\n' "$tree" | grep -vE '^hc-verify v' || true)"
+      if [[ -n "$extra" ]]; then
+        echo "forbidden: hc-verify has something beneath it in the dependency graph"
+        printf '%s\n' "$extra" | sed 's/^/  /'
+        status=1
+      fi
+    fi
+  fi
+fi
+
+# The reference solver is the oracle the production search is checked against.
+# An oracle that imports the code it checks agrees with it exactly where
+# agreement is worthless, so the reference module may not reach for the
+# production linear algebra or search. The scan is fail-closed the other way
+# too: if the bench crate exists and the reference module has vanished, the
+# check would silently pass while covering nothing, so that is a failure.
+if [[ -d crates/hc-bench ]]; then
+  ref_paths=()
+  [[ -f crates/hc-bench/src/ref_lp.rs ]] && ref_paths+=(crates/hc-bench/src/ref_lp.rs)
+  [[ -d crates/hc-bench/src/ref_lp ]] && ref_paths+=(crates/hc-bench/src/ref_lp)
+  if [[ ${#ref_paths[@]} -eq 0 ]]; then
+    echo "forbidden: crates/hc-bench exists but the reference solver is missing; the oracle check would be vacuous"
+    status=1
+  else
+    borrowed="$(grep -rnE --include='*.rs' '\b(use|extern crate)[[:space:]]+hc_(lp|mip|cuts|heur|presolve)\b' "${ref_paths[@]}" 2>/dev/null \
+      | grep -vE ':[0-9]+:[[:space:]]*(//|/\*|\*)' || true)"
+    if [[ -n "$borrowed" ]]; then
+      echo "forbidden: the reference solver imports production solver code"
+      echo "$borrowed" | sed 's/^/  /'
+      status=1
+    fi
   fi
 fi
 
