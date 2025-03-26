@@ -1,0 +1,23 @@
+[package]
+name = "hc-verify"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# This table stays empty. Not "empty for now" — empty. Everything this crate
+# needs, it carries: its own arbitrary-precision arithmetic, its own hashes,
+# its own readers for the specification and for instance files, and its own
+# rule engine. The isolation check in continuous integration fails the build if
+# a dependency ever appears here, and the same check fails if a source file
+# imports a workspace crate.
+#
+# The reason is not minimalism. A proof rechecked by code that shares a library
+# with the code that produced the proof is rechecked against the same bugs. The
+# only defence available is that the two implementations were written
+# separately and share nothing, and a dependency is the easiest way to lose
+# that without noticing.
+
+[lints]
+workspace = true
