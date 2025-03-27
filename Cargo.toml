@@ -3,11 +3,12 @@ resolver = "3"
 members = [
     "crates/hc-core",
     "crates/hc-exact",
+    "crates/hc-io",
     "crates/hc-verify",
 ]
 
 [workspace.package]
-version = "0.2.4"
+version = "0.2.5"
 authors = ["Sidakpreet Singh"]
 edition = "2024"
 license = "MIT"

@@ -1,0 +1,22 @@
+[package]
+name = "hc-io"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
+
+# The cross-parser differential is the one place both readers are in scope at
+# once. The edge points this way and only this way: a caller may use the
+# verifier's public interface, and the verifier may use nothing. A harness
+# living inside the verifier that reached for this crate would dissolve the
+# property it exists to measure, which is why the differential lives here.
+[dev-dependencies]
+hc-verify = { path = "../hc-verify" }
+
+[lints]
+workspace = true
