@@ -155,6 +155,11 @@ group = 'HC-INSTANCE'
 check = 'End of input before the terminating section.'
 message = 'unexpected end of input before ENDATA'
 
+[reject.HC-INSTANCE-29]
+group = 'HC-INSTANCE'
+check = 'Byte-level shape of the input, before any line is examined.'
+message = 'input is not ASCII text with line-feed line endings'
+
 [reject.HC-INSTANCE-27]
 group = 'HC-INSTANCE'
 check = 'LP-format grammar, at the offending token.'

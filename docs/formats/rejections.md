@@ -42,6 +42,7 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 | `HC-INSTANCE-24` | duplicate bound of the same type on one column | Bound type and column against previously applied bounds. |
 | `HC-INSTANCE-25` | record carries more fields than its type accepts | Field count in free form, at each record. |
 | `HC-INSTANCE-26` | unexpected end of input before ENDATA | End of input before the terminating section. |
+| `HC-INSTANCE-29` | input is not ASCII text with line-feed line endings | Byte-level shape of the input, before any line is examined. |
 | `HC-INSTANCE-27` | LP-format input does not match the accepted grammar | LP-format grammar, at the offending token. |
 | `HC-INSTANCE-28` | JSON instance does not match the accepted schema | JSON instance schema, at the offending member. |
 

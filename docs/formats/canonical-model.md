@@ -181,6 +181,13 @@ How raw instance bytes become the exact model a proof is about, and how two pars
 - **order** — 13
 - **form** — end
 
+## `[encoding]`
+
+- **rule** — Accepted input is ASCII with line-feed line endings. A byte at or above 128, a carriage return, and any other control character outside the line feed are rejected before any line is examined.
+- **reason** — The canonical dump is ASCII, and a name is written into it verbatim. A name that cannot appear in the dump cannot appear in a model, so the restriction is derived from the comparison the two parsers have to perform rather than chosen for convenience.
+- **line_endings** — A file with carriage returns is a different byte sequence from the same file without them, and therefore a different instance under the digest. Accepting both and normalizing would make two files with different digests produce the same model, which is the one thing the digest exists to prevent.
+- **id** — HC-INSTANCE-29
+
 ## `[strictness]`
 
 - **default** — Strict. A file that is not unambiguously within the accepted subset is rejected with an identifier, never repaired by inference.
