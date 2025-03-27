@@ -1,0 +1,15 @@
+[package]
+name = "hc-bench"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
+hc-io = { path = "../hc-io" }
+
+[lints]
+workspace = true
