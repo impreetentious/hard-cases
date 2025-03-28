@@ -1,0 +1,20 @@
+[package]
+name = "hc-lp"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
+
+# The working copy is derived from a parsed model, and the only honest way to
+# test that derivation is to parse a file and derive from it. The edge is a
+# development one: nothing in the shipped library reads an instance.
+[dev-dependencies]
+hc-io = { path = "../hc-io" }
+
+[lints]
+workspace = true

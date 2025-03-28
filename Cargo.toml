@@ -5,11 +5,12 @@ members = [
     "crates/hc-bench",
     "crates/hc-exact",
     "crates/hc-io",
+    "crates/hc-lp",
     "crates/hc-verify",
 ]
 
 [workspace.package]
-version = "0.2.7"
+version = "0.3.0"
 authors = ["Sidakpreet Singh"]
 edition = "2024"
 license = "MIT"
