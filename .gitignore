@@ -6,10 +6,13 @@ theater/dist/
 /artifacts/
 /out/
 
-# Fetched instance archives. The fetch scripts and their hashes are tracked;
-# the downloaded models never are.
-/instances/netlib/
-/instances/miplib/
+# Fetched instance collections. The manifest that names them, the pin file's
+# rules, and the fetch script are tracked; the downloaded models never are, and
+# neither is the pin file, which is a record of what one machine fetched.
+/instances/netlib/*
+!/instances/netlib/manifest.toml
+/instances/miplib/*
+!/instances/miplib/manifest.toml
 
 # Solver output
 *.hcc

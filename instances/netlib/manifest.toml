@@ -1,0 +1,36 @@
+# The netlib subset, version 1.
+#
+# These files are not committed. They belong to a public collection with its
+# own provenance, and vendoring a copy into this repository would make the
+# scoreboard a statement about the copy rather than about the collection.
+# `scripts/fetch-netlib.sh` retrieves them.
+#
+# What pinning means here, precisely. A pin is a digest recorded from a file
+# somebody actually fetched, and it cannot be written down before that happens
+# — a digest invented at the desk pins nothing and would make every later
+# verification a formality. So the pin file starts absent, the first fetch
+# creates it and says loudly that it created rather than verified, and every
+# fetch after that verifies against it and fails on a mismatch. The state of
+# the pin is reported on the scoreboard rather than assumed, because "we pinned
+# it" is a claim like any other.
+#
+# The list is fixed before first publication and is never pruned to flatter
+# results. An instance that cannot be fetched, cannot be read, or cannot be
+# solved stays on the board with the reason beside it.
+
+[meta]
+version = 1
+title = 'Netlib subset v1'
+summary = 'The instance names the scoreboard covers, where they come from, and what pinning them means.'
+form = 'fixed'
+source = 'The netlib linear programming collection, in its compressed MPS distribution.'
+committed = false
+
+[easy]
+covers = 'The subset the first scoreboard is built from: small, well conditioned, and solved by every implementation, so a failure here is a failure in this implementation rather than a hard instance.'
+names = ['afiro', 'adlittle', 'sc50a', 'sc50b', 'sc105', 'kb2', 'blend', 'share2b', 'sc205', 'stocfor1', 'scagr7', 'israel']
+
+[pin]
+file = 'pinned.toml'
+rule = 'A digest per instance, written by the first fetch and verified by every fetch after it. A mismatch is a failure, never a silent update.'
+absent = 'When the pin file is missing, no instance has been fetched on this machine, and the scoreboard says so in those words rather than showing an empty table.'
