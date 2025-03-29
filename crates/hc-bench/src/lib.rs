@@ -14,4 +14,5 @@
 //! integration fails the build if it ever does.
 
 pub mod campaign;
+pub mod corpus;
 pub mod ref_lp;

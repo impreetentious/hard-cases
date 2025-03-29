@@ -1,0 +1,61 @@
+# The committed corpus, version 1.
+#
+# Eight instance files with structure a random generator does not produce:
+# a transportation matrix, a blend with a ranged specification, a covering
+# system, a conservation law, every nonbasic resting place at once, a cycling
+# example, a genuine infeasibility, and a genuine ray.
+#
+# What the objective field records is *evidence*, and the evidence field says
+# which kind. At this stage it is the value two independently written solvers
+# agree on — one a revised simplex with a factorization, scaling, and an
+# escalation ladder, the other a dense tableau with Bland's rule and nothing
+# else. That is real evidence and it is not a proof. When exact assembly and
+# independent verification exist, the same field carries a value a checker
+# accepted, and the evidence word changes with it. It is written down rather
+# than assumed so that nobody later reads agreement as certification.
+
+[meta]
+version = 1
+title = 'Committed instance corpus v1'
+summary = 'Structured instance files a generator does not produce, with the status each must reach.'
+form = 'fixed'
+
+[instance.transport33]
+file = 'transport33.mps'
+expect = 'optimal'
+covers = 'A totally unimodular transportation matrix with supply and demand balanced exactly. Every row is an equality, so the first phase does real work before the objective is looked at once.'
+
+[instance.blend4]
+file = 'blend4.mps'
+expect = 'optimal'
+covers = 'A blend with a ranged specification row and a purchase limit. The range table is the single most consequential disagreement between readers of the format, and this is the corpus entry that would notice.'
+
+[instance.cover6]
+file = 'cover6.mps'
+expect = 'optimal'
+covers = 'A covering system: every row a greater-than row with a positive right-hand side, so the origin is infeasible and the first phase must find a feasible point before optimizing.'
+
+[instance.flow8]
+file = 'flow8.mps'
+expect = 'optimal'
+covers = 'Minimum-cost flow with capacities as bounds rather than rows, and conservation rows whose right-hand sides sum to zero.'
+
+[instance.freevars5]
+file = 'freevars5.mps'
+expect = 'optimal'
+covers = 'Free, negatively bounded, above-only bounded, and fixed columns together, which is every nonbasic resting place the search knows about in one instance.'
+
+[instance.cycle7]
+file = 'cycle7.mps'
+expect = 'optimal'
+covers = 'Beale s cycling example. Every pivot from the starting basis is degenerate, and a change to the pricing rule or the ratio test has to face it before it is committed.'
+
+[instance.infeasible4]
+file = 'infeasible4.mps'
+expect = 'infeasible'
+covers = 'An infeasibility that needs two rows and a bound together rather than a single crossed pair, so the first phase must run to completion before reporting.'
+
+[instance.unbounded3]
+file = 'unbounded3.mps'
+expect = 'unbounded'
+covers = 'A ray found from a feasible point rather than from the origin, because one column is bounded and pulls the search into the region first.'
