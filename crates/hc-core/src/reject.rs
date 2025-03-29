@@ -70,7 +70,7 @@ macro_rules! rejections {
 /// The certificate groups belong to the crates that read certificates and are
 /// added when those exist. Listing the covered groups explicitly is what lets
 /// the completeness check be exact rather than approximate.
-pub const COVERED_GROUPS: &[&str] = &["HC-INSTANCE"];
+pub const COVERED_GROUPS: &[&str] = &["HC-INSTANCE", "HCC-PARSE"];
 
 rejections! {
     /// The file is longer than the accepted size.
@@ -131,6 +131,47 @@ rejections! {
     INSTANCE_JSON_SCHEMA => "HC-INSTANCE-28",
     /// The input is not ASCII text with line-feed line endings.
     INSTANCE_NOT_TEXT => "HC-INSTANCE-29",
+
+    /// The stream does not begin with the certificate magic.
+    HCC_MAGIC => "HCC-PARSE-01",
+    /// The header names a version this reader does not implement.
+    HCC_VERSION => "HCC-PARSE-02",
+    /// The header's digest is not the digest of the instance supplied.
+    HCC_NOT_THIS_INSTANCE => "HCC-PARSE-03",
+    /// A declared size exceeds a cap, before anything is allocated.
+    HCC_DECLARED_TOO_LARGE => "HCC-PARSE-04",
+    /// A variable-length integer is encoded in more bytes than it needs.
+    HCC_NON_MINIMAL_LENGTH => "HCC-PARSE-05",
+    /// A variable-length integer does not fit in sixty-four bits.
+    HCC_LENGTH_OVERFLOW => "HCC-PARSE-06",
+    /// The stream ends inside a record.
+    HCC_TRUNCATED => "HCC-PARSE-07",
+    /// Bytes follow the terminating record.
+    HCC_TRAILING_BYTES => "HCC-PARSE-08",
+    /// The checksum does not match the bytes it covers.
+    HCC_CHECKSUM => "HCC-PARSE-09",
+    /// A record type outside the closed list.
+    HCC_UNKNOWN_RECORD => "HCC-PARSE-10",
+    /// A record's payload is not the length it declared.
+    HCC_RECORD_LENGTH => "HCC-PARSE-11",
+    /// Record identifiers are not strictly increasing.
+    HCC_IDENTIFIER_ORDER => "HCC-PARSE-12",
+    /// A rational is not written in canonical form.
+    HCC_RATIONAL_FORM => "HCC-PARSE-13",
+    /// A rational is wider than the bit cap.
+    HCC_RATIONAL_BITS => "HCC-PARSE-14",
+    /// A rational's declared token length exceeds the maximum.
+    HCC_RATIONAL_TOKEN => "HCC-PARSE-15",
+    /// A set-valued array is unsorted or repeats an element.
+    HCC_SET_ORDER => "HCC-PARSE-16",
+    /// The terminating record's counts disagree with the stream.
+    HCC_END_COUNTS => "HCC-PARSE-17",
+    /// The declared tree depth exceeds the cap.
+    HCC_DEPTH => "HCC-PARSE-18",
+    /// The running record count exceeds the cap.
+    HCC_RECORD_COUNT => "HCC-PARSE-19",
+    /// The running byte count exceeds the cap.
+    HCC_BYTE_COUNT => "HCC-PARSE-20",
 }
 
 /// A refusal: the rule, what it was looking at, and where.

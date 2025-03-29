@@ -1,0 +1,19 @@
+[package]
+name = "hc-cert"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
+hc-lp = { path = "../hc-lp" }
+
+[dev-dependencies]
+hc-io = { path = "../hc-io" }
+hc-verify = { path = "../hc-verify" }
+
+[lints]
+workspace = true
