@@ -19,7 +19,9 @@ pub mod inverse;
 pub mod lu;
 pub mod pricing;
 pub mod problem;
+pub mod ratio;
 pub mod scale;
+pub mod simplex;
 pub mod sparse;
 pub mod working;
 
@@ -28,6 +30,8 @@ pub use inverse::{Inverse, Reason, Unstable};
 pub use lu::{Factorization, Singular};
 pub use pricing::{Entering, Pricing, Rule};
 pub use problem::Problem;
+pub use ratio::Step;
 pub use scale::Scaling;
+pub use simplex::{Effort, Options, Outcome, solve, solve_from};
 pub use sparse::{SparseVec, Workspace};
 pub use working::{Kind, Working};

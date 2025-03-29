@@ -10,6 +10,15 @@ publish = false
 hc-core = { path = "../hc-core" }
 hc-exact = { path = "../hc-exact" }
 hc-io = { path = "../hc-io" }
+# The harness drives the production solver; the reference solver beside it does
+# not, and a gate refuses the build if that ever changes.
+hc-lp = { path = "../hc-lp" }
+
+# The campaign checks that every generated instance is readable by the
+# verifier's parser as well as the solver's, so a finding is always one both
+# sides can be pointed at.
+[dev-dependencies]
+hc-verify = { path = "../hc-verify" }
 
 [lints]
 workspace = true

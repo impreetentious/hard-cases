@@ -4,30 +4,32 @@ version = 4
 
 [[package]]
 name = "hc-bench"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "hc-core",
  "hc-exact",
  "hc-io",
+ "hc-lp",
+ "hc-verify",
 ]
 
 [[package]]
 name = "hc-core"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "hc-exact",
 ]
 
 [[package]]
 name = "hc-exact"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "hc-core",
 ]
 
 [[package]]
 name = "hc-io"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -36,7 +38,7 @@ dependencies = [
 
 [[package]]
 name = "hc-lp"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -45,4 +47,4 @@ dependencies = [
 
 [[package]]
 name = "hc-verify"
-version = "0.3.1"
+version = "0.4.0"

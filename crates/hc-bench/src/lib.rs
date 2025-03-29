@@ -13,4 +13,5 @@
 //! the production linear-algebra or search code, and a gate in continuous
 //! integration fails the build if it ever does.
 
+pub mod campaign;
 pub mod ref_lp;
