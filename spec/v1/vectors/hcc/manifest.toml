@@ -1,0 +1,30 @@
+# Certificate vectors, version 1.
+#
+# Hand-written certificate bytes with every field annotated. They exist because
+# a byte format is a contract between two programs that never meet: the solver
+# writes and the verifier reads, and the only way to know they agree is to hold
+# both against bytes neither of them produced.
+#
+# The hexadecimal files carry comment lines beginning with a number sign and
+# whitespace between byte groups. A reader strips both; what remains is the
+# file. Keeping the annotation inside the asset rather than beside it means an
+# edit to the bytes and an edit to the explanation are the same edit.
+
+[meta]
+version = 1
+title = 'Certificate vectors v1'
+summary = 'Hand-written certificate byte streams, annotated field by field, read by the writer on one side and the reader on the other.'
+
+[format]
+encoding = 'Hexadecimal byte pairs. A number sign begins a comment that runs to the end of the line. Whitespace between bytes is insignificant.'
+authority = 'The stripped bytes are the vector. An implementation that cannot reproduce them and cannot accept them disagrees with the specification, not with the other implementation.'
+
+[vector.tiny_optimal]
+file = 'tiny-optimal.hex'
+instance = '../mps/tiny.mps'
+canon = '../mps/tiny.canon'
+claim = 'optimal'
+bytes = 150
+records = 5
+covers = 'The minimal proof-bearing certificate: a root, one dual bound whose single multiplier sums to the objective, the incumbent that attains it, the claim, and the terminator. It exercises the header binding, minimal variable-length integers, canonical rational text, the record identifier sequence, the per-kind counts, and the checksum.'
+working = 'Inequality 0 is the row upper side, -x >= -4, whose coefficient vector equals the objective vector (-1). One times it gives L = 0 + 1*(-4) = -4. The point x = 4 is feasible and attains -4, so L = U and the claim canonicalizes from a gap to optimal.'

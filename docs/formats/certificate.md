@@ -237,3 +237,10 @@ The certificate encoding, the closed record kinds and their order, and the four 
 - **construction** — For each visible ranged, base, or cut row, deterministically introduce one continuous activity variable s_i defined by s_i = a_i dot x, carrying that row finite or infinite bounds.
 - **status** — This is verifier-reconstructed definitional state. It is never an axiom the certificate supplies and never something the certificate may assert a value for.
 - **requirement** — The recorded unrestricted rational combination of the equations s_i - a_i dot x = 0 must isolate exactly one integer original or aggregate variable with coefficient one, and every other basic coefficient must be exactly zero.
+
+## `[vectors]`
+
+- **directory** — vectors/hcc
+- **manifest** — vectors/hcc/manifest.toml
+- **rule** — Every certificate vector is written by hand in annotated hexadecimal and neither implementation generated it. The writer must reproduce the bytes and the reader must accept them; a disagreement is a disagreement with this specification rather than between the two programs.
+- **checksum_vectors** — The CRC-32C values in vectors/hash/hashes.toml pin the polynomial and both exclusive-ors independently of any certificate, so a checksum failure on a real certificate is never the first evidence that the checksum itself is wrong.
