@@ -181,6 +181,12 @@ How raw instance bytes become the exact model a proof is about, and how two pars
 - **order** — 13
 - **form** — end
 
+## `[dump.hash]`
+
+- **rule** — The canonical model hash is SHA-256 over the bytes of the canonical dump, with nothing prepended and nothing appended.
+- **reason** — A certificate root names the model its tree is about, and both implementations must compute that name from something they already agree on byte for byte. The dump is exactly that: a total rendering with no choices left in it. Hashing an implementation model instead would make the name depend on a data structure, and the two sides do not share one.
+- **distinct_from_digest** — This is not the instance digest. The instance digest names a file; this names a model, and after presolve the two differ. For a model read straight from a file with no transform applied, both exist and both are checked, because they answer different questions.
+
 ## `[encoding]`
 
 - **rule** — Accepted input is ASCII with line-feed line endings. A byte at or above 128, a carriage return, and any other control character outside the line feed are rejected before any line is examined.

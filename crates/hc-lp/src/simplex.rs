@@ -58,6 +58,16 @@ pub enum Outcome {
         point: Vec<f64>,
         /// A recession direction along which the objective strictly falls.
         ray: Vec<f64>,
+        /// The column whose movement is unbounded.
+        ///
+        /// Carried so that exact assembly can rebuild the direction from the
+        /// model rather than from this floating-point copy of it. A ray that
+        /// went into a certificate as computed here would be a ray about the
+        /// scaled problem, in rounded numbers, and neither of those is what a
+        /// claim is about.
+        entering: usize,
+        /// Plus one when that column rises, minus one when it falls.
+        direction: i8,
     },
     /// The iteration budget ran out.
     ///
@@ -359,7 +369,18 @@ pub fn solve_from(problem: &Problem, start: Basis, options: &Options) -> (Outcom
                 }
                 let ray =
                     recession_ray(problem, &basis, entering.column, entering.direction, &alpha);
-                return (Outcome::Unbounded { basis, point, ray }, effort);
+                let column = entering.column;
+                let direction = if entering.direction > 0.0 { 1i8 } else { -1i8 };
+                return (
+                    Outcome::Unbounded {
+                        basis,
+                        point,
+                        ray,
+                        entering: column,
+                        direction,
+                    },
+                    effort,
+                );
             }
             Step::BoundFlip { .. } => {
                 degenerate_run = 0;

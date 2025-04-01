@@ -26,20 +26,35 @@
 //! the trusted base; its size and its plainness are properties a reader has to
 //! be able to check by reading it. The solver may be clever.
 
+pub mod vaxiom;
+pub mod vcli;
+pub mod vclose;
 pub mod vhash;
+pub mod vhcc;
 pub mod vint;
 pub mod vmodel;
 pub mod vparse;
 pub mod vrat;
 pub mod vreject;
+pub mod vrules;
 pub mod vspec;
 pub mod vtext;
+pub mod vwork;
 
+pub use vaxiom::{Axioms, Inequality, Sum};
+pub use vcli::{Ask, Request, accepted, headline, refused, request, version};
+pub use vclose::{Verdict, close, model_hash, verify};
 pub use vhash::{Checksum, Digest, checksum, digest, instance_digest, to_hex};
+pub use vhcc::{Claim, Proof, Step, from_annotated_hex};
 pub use vint::{Int, IntError, Nat, NatError};
 pub use vmodel::{Axiom, Cell, Column, Constraint, Direction, Face, Instance, Tag};
 pub use vparse::Layout;
 pub use vrat::Frac;
 pub use vreject::{Code, Rejected};
+pub use vrules::{
+    Bound, bound_is, contradiction, dual_bound, everything, objective_is, point_is_feasible,
+    relative_gap,
+};
 pub use vspec::{Asset, AssetError};
 pub use vtext::NumberError;
+pub use vwork::Work;

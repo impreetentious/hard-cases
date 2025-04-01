@@ -1,0 +1,95 @@
+# A complete certificate, by hand, in hexadecimal.
+#
+# The instance is vectors/mps/tiny.mps:
+#
+#   minimize  -x
+#   subject to      x <= 4
+#             0 <=  x <= 10,  x integer
+#
+# Canonical inequality 0 is the row's upper side, written -x >= -4. Its
+# coefficient vector is (-1), which is the objective vector, so a multiplier of
+# one on it sums to the objective and establishes L = 0 + 1*(-4) = -4. The
+# point x = 4 is feasible and attains -4, so L equals U and the claim is
+# optimal rather than a gap.
+#
+# Every byte below is annotated. Whitespace and comment lines are not part of
+# the vector; strip them and the remaining 150 bytes are the file. Both the
+# solver's writer and the verifier's reader are held against these bytes, and
+# neither generated them.
+
+# --- header, 66 bytes -----------------------------------------------------
+
+48 43 43 31              # magic, "HCC1"
+01 00                    # certificate format version 1, little endian
+01 00                    # canonicalization version 1
+01                       # format tag 1: fixed-form MPS
+b2 00 00 00 00 00 00 00  # the instance is 178 bytes long
+                         # the instance digest, SHA-256 of the tag byte
+                         # followed by the file's bytes
+b4 e7 9a f6 38 0a 28 d6
+4f 56 64 98 0b b3 d2 52
+b7 d4 5c e5 27 dd c7 ee
+ea b2 e0 db 16 0d ce 8d
+01                       # claim kind 1: optimal
+05 00 00 00 00 00 00 00  # five records are declared
+92 00 00 00 00 00 00 00  # 146 bytes are declared, header included,
+                         # excluding only the four checksum bytes
+
+# --- record 0: Root -------------------------------------------------------
+
+03                       # record type 3, Root
+00                       # record identifier 0
+21                       # payload length 33
+00                       # node 0
+                         # the reduced model's canonical hash, which for a
+                         # certificate with no transforms is SHA-256 of the
+                         # canonical dump in vectors/mps/tiny.canon
+9d 43 70 16 49 9e b0 15
+bf f1 05 14 2e 8e 9d 71
+33 95 30 4f 79 c5 5e fb
+bc a4 a9 6a 32 c7 45 a7
+
+# --- record 1: DualBound --------------------------------------------------
+
+10                       # record type 16, DualBound
+01                       # record identifier 1
+05                       # payload length 5
+00                       # at node 0
+01                       # one term
+00                       # cites canonical inequality 0
+01 31                    # multiplier, one byte of text: "1"
+
+# --- record 2: Incumbent --------------------------------------------------
+
+50                       # record type 80, Incumbent
+02                       # record identifier 2
+09                       # payload length 9
+01 01 34                 # the reduced point: one component, "4"
+01 01 34                 # the original point: one component, "4"
+02 2d 34                 # the objective it attains: "-4"
+
+# --- record 3: Claim ------------------------------------------------------
+
+60                       # record type 96, Claim
+03                       # record identifier 3
+07                       # payload length 7
+01                       # claim kind 1: optimal
+01 02 2d 34              # the objective is present: "-4"
+00                       # no separate lower bound; an optimal claim has L = U
+00                       # no gap
+
+# --- record 4: End --------------------------------------------------------
+
+7f                       # record type 127, End
+04                       # record identifier 4
+0b                       # payload length 11
+05                       # five kinds are counted
+03 01                    # one Root
+10 01                    # one DualBound
+50 01                    # one Incumbent
+60 01                    # one Claim
+7f 01                    # one End
+
+# --- checksum, 4 bytes ----------------------------------------------------
+
+c3 01 30 e1              # CRC-32C of the 146 bytes above, little endian
