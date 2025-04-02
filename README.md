@@ -93,7 +93,7 @@ shows the machinery that catches it.
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this does and does not
   prove; read it before interpreting any result
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this kernel will not claim
-- [`docs/adr/0004-verifier-isolation-check-scope.md`](docs/adr/0004-verifier-isolation-check-scope.md) — the verifier's trust boundary
+- [`docs/adr/0010-a-verifier-refuses-what-it-cannot-check.md`](docs/adr/0010-a-verifier-refuses-what-it-cannot-check.md) — the verifier's trust boundary
   source hash, and the words "independent" is and is not doing here
 - [`docs/formats/`](docs/formats/) — the certificate grammar, the accepted
   MPS and LP subsets, and the JSON schema, generated from the inert assets
@@ -122,4 +122,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.5.2
+**Version:** v0.5.3
