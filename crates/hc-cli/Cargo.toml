@@ -1,0 +1,31 @@
+[package]
+name = "hc-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "hc"
+path = "src/main.rs"
+
+[dependencies]
+hc-bench = { path = "../hc-bench" }
+hc-cert = { path = "../hc-cert" }
+hc-core = { path = "../hc-core" }
+hc-io = { path = "../hc-io" }
+hc-lp = { path = "../hc-lp" }
+hc-verify = { path = "../hc-verify" }
+
+# This crate reads files and the command line, which the deterministic
+# perimeter forbids, so it declares its own lint table and says so out loud.
+# Narrowing the perimeter is what keeps it meaningful: the solver crates are
+# still refused a clock and a filesystem, and this one is the edge where the
+# outside world is allowed in.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+disallowed_types = "allow"

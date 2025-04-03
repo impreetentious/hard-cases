@@ -62,7 +62,7 @@ if (version && has("theater/package.json")) {
 // The verifier prints its own version and source hash in the trust-boundary
 // receipt. That number is a claim about which code checked the proof, so it
 // must come from the manifest and never from a hand-maintained string.
-for (const file of ["crates/hc-cli/src/main.rs", "crates/hc-verify/src/main.rs"]) {
+for (const file of ["crates/hc-cli/src/version.rs", "crates/hc-verify/src/vcli.rs"]) {
   if (!has(file)) continue;
   if (!read(file).includes('env!("CARGO_PKG_VERSION")')) {
     errors.push(`${file} must derive runtime versions from CARGO_PKG_VERSION`);

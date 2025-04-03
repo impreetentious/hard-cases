@@ -25,4 +25,12 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: ./scripts/ci/forbidden-grep.sh
       - run: cargo test --locked --workspace --all-targets
+      # The two front doors, on the real executables. A certificate is checked
+      # by the standalone binary with none of the solver linked, and by the
+      # wrapper the command line offers, and the two must agree byte for byte.
+      - run: ./scripts/ci/parity.sh
+      # The certification campaign at its nightly size, under release
+      # optimizations. A hundred thousand generated instances, each solved,
+      # rebuilt exactly, and rechecked by the standalone verifier.
+      - run: cargo test --release -p hc-bench --test certification -- --ignored
       - run: cargo doc --workspace --no-deps

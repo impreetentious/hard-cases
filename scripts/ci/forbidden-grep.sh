@@ -87,8 +87,13 @@ scan "unordered container in a solver crate" \
 # determinism and honesty in the same line.
 scan "ambient time in a solver crate (effort is counted, never timed)" \
   '\b(SystemTime|Instant)\b'
+# The verifier ships an executable, and an executable reads its arguments and
+# its input. Exactly one file is allowed to do so; the exemption names that one
+# path and nothing else, and the check below pays for it by proving the path
+# exists and is the only place in the crate that reaches outside the process.
 scan "ambient environment, filesystem, or threads in a solver crate" \
-  '\bstd::(env|fs|thread|process)\b'
+  '\bstd::(env|fs|thread|process)\b' \
+  '^crates/hc-verify/src/bin/hc-verify\.rs:'
 
 # The verifier's independence is the entire project. It is checked here rather
 # than left to review, because the failure mode is a single convenient import
@@ -135,6 +140,36 @@ if [[ -d crates/hc-verify ]]; then
         printf '%s\n' "$extra" | sed 's/^/  /'
         status=1
       fi
+    fi
+  fi
+fi
+
+# The price of the exemption above. The verifier's executable is allowed to
+# reach outside the process; nothing else in the crate is, and the exemption is
+# worth only as much as that. The check is fail-closed in both directions: if
+# the exempted file has vanished, the exemption is covering nothing and that is
+# a failure, and if a second file in the crate reaches outside, the exemption
+# has quietly widened and that is a failure too.
+if [[ -d crates/hc-verify ]]; then
+  entry="crates/hc-verify/src/bin/hc-verify.rs"
+  if [[ ! -f "$entry" ]]; then
+    echo "forbidden: the verifier's exempted entry point is missing; the exemption covers nothing"
+    status=1
+  else
+    outward="$(grep -rlE --include='*.rs' '\bstd::(env|fs|thread|process)\b' crates/hc-verify/ 2>/dev/null \
+      | grep -vE "^$entry$" || true)"
+    if [[ -n "$outward" ]]; then
+      echo "forbidden: a second file in hc-verify reaches outside the process"
+      echo "$outward" | sed 's/^/  /'
+      status=1
+    fi
+    # The entry point is a shell. It reads, it prints, it exits; the checking
+    # happens in the library, where the tests can reach it. A binary that grew
+    # logic would be logic outside every harness in the project.
+    lines="$(grep -cvE '^[[:space:]]*(//|$)' "$entry" || true)"
+    if [[ "$lines" -gt 120 ]]; then
+      echo "forbidden: the verifier's entry point has grown to $lines lines; it is meant to be a shell"
+      status=1
     fi
   fi
 fi

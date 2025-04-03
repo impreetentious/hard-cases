@@ -66,7 +66,10 @@ trap_depth = 'trap_deep_tree_iterative'
 
 [caps.work]
 verifier_unit = 'VWU'
-definition = 'One verifier work unit per parsed byte, and one per primitive limb-word operation: add, subtract, compare, shift, multiply, and each inner step of a division. The counter is incremented centrally inside the arithmetic and parser primitives, never by callers, so a new call site cannot forget to pay.'
+definition = 'One verifier work unit per parsed byte, and one per limb-word step of arithmetic: add, subtract, compare, shift, multiply, and each inner step of a division and of a reduction to lowest terms.'
+accounting = 'The count is charged at the metered arithmetic every proof rule performs its work through, from the limb widths of the operands, rather than accumulated inside the primitives. A rule reaches the arithmetic through the meter or it performs none, so a new call site cannot forget to pay.'
+bound = 'The figure is an upper bound on the real step count, because a reduction to lowest terms takes a number of steps that depends on its inputs and is charged its widest case. Reporting a ceiling is the safe direction: the count gates no mathematics, so a cap that fires early can only refuse to finish a verification and can never admit an unsound proof.'
+determinism = 'The same certificate and instance produce the same count on every machine, and the count is monotone in the width of the values, so a larger proof can never be charged less.'
 netlib_limit = 100000000000
 miplib_limit = 1000000000000
 separate = 'Verifier work units and solver effort are different currencies and are never combined into one number. The solver counts iterations, nodes, and cut rounds; the verifier counts bytes and limb operations.'

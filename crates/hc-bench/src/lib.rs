@@ -16,3 +16,5 @@
 pub mod campaign;
 pub mod corpus;
 pub mod ref_lp;
+
+pub mod receipt;
