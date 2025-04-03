@@ -15,6 +15,7 @@
 
 pub mod campaign;
 pub mod corpus;
-pub mod ref_lp;
-
+pub mod proof;
 pub mod receipt;
+pub mod ref_lp;
+pub mod tamper;

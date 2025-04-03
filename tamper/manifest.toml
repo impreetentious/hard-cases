@@ -1,0 +1,142 @@
+# The tamper corpus, version 1.
+#
+# Forged certificates and the rule that must catch each one. This is a product
+# surface, not a test fixture: it is what the tamper lab lets a visitor edit, it
+# is what a reader who disbelieves the whole arrangement should reach for first,
+# and it is the answer to "how do you know the verifier is doing anything".
+#
+# Every entry names one rejection identifier, and the identifier must be the
+# earliest check that can see the defect. A corpus that only asserted "all of
+# these are rejected" would pass while every one of them was caught by the
+# checksum, which would establish nothing about the proof rules — and would go
+# on passing after a proof rule was deleted.
+#
+# Most entries are re-encoded with a correct checksum, because anyone holding
+# the format specification can repair one. Those entries have to be refused by
+# the mathematics. The few that are not resealed exist to pin the reader's own
+# rules and say so in their notes.
+#
+# The corpus grows. When an incident turns up a mutation nobody had thought of,
+# it becomes an entry here and stays one.
+
+[meta]
+version = 1
+title = 'Tamper corpus v1'
+summary = 'Named mutations of genuine certificates, each paired with the rejection identifier that must answer it.'
+
+[policy]
+earliest = 'The identifier an entry names must be the earliest check that can detect the defect. An entry caught late is an entry that got past a check that should have stopped it, and the corpus pins the order of the checks as well as their existence.'
+resealed = 'An entry marked resealed carries a checksum that is correct for the bytes it ships, so the refusal has to come from a rule about content rather than from corruption. Only the entry that exists to pin the checksum itself is unsealed.'
+growth = 'Entries are added and never quietly removed. A mutation that stops being catchable is a finding.'
+
+# ===========================================================================
+# The inference rules
+# ===========================================================================
+
+[case.negated_multiplier]
+expect = 'HCC-DUAL-01'
+resealed = true
+edit = 'Negate the first multiplier of the first inference.'
+note = 'The single mutation that turns the rule from sound into arbitrary: a negative multiplier reverses the inequality it is applied to. It is checked before the sum is formed, because after the sum it is indistinguishable from arithmetic that merely came out wrong.'
+
+[case.zero_multiplier]
+expect = 'HCC-DUAL-02'
+resealed = true
+edit = 'Append a multiplier of zero on a fresh inequality identifier.'
+note = 'The derivation is still correct and the record is still refused. A zero multiplier contributes nothing and gives one inference two encodings, which would make the certificate bytes depend on something with no meaning.'
+
+[case.inflated_bound_multiplier]
+expect = 'HCC-DUAL-04'
+resealed = true
+edit = 'Double the first multiplier of a lower-bound inference.'
+note = 'Each multiplied inequality remains true and the sum no longer lands on the objective vector. Truth of the parts is not the check; the sum is. Doubling a contradiction multiplier instead breaks a different rule, which is the entry below.'
+
+[case.dropped_bound_multiplier]
+expect = 'HCC-DUAL-05'
+resealed = true
+edit = 'Remove the last multiplier from a contradiction.'
+note = 'The classic omission: a Farkas witness over rows only, with the variable bounds assumed available by convention. Here a bound is a canonical inequality with an identifier exactly as a row side is, there is no convention to lean on, and the coefficients fail to cancel.'
+
+[case.phantom_inequality]
+expect = 'HCC-DUAL-07'
+resealed = true
+edit = 'Cite an inequality identifier far past the end of the model.'
+note = 'A citation of an axiom the model does not contain. The verifier builds the inequality list from the file it parsed, so there is nothing for the citation to name.'
+
+# ===========================================================================
+# The witnesses
+# ===========================================================================
+
+[case.misstated_objective]
+expect = 'HCC-POINT-04'
+resealed = true
+edit = 'Add one to the objective the incumbent states.'
+note = 'The point is genuinely feasible and the number attached to it is wrong. The verifier recomputes the objective from the point and the model rather than reading it.'
+
+[case.moved_incumbent]
+expect = 'HCC-POINT-01'
+resealed = true
+edit = 'Move the first component of the incumbent far outside the feasible region.'
+note = 'The stated objective still matches nothing, but the row check fires first: a point is checked against the model before its objective is worth computing.'
+
+[case.dropped_incumbent]
+expect = 'HCC-CLAIM-03'
+resealed = true
+edit = 'Delete the incumbent record entirely.'
+note = 'A bound with no point beneath it proves a lower bound and claims optimality. The missing witness is the defect, and the claim closure is where it is noticed.'
+
+# ===========================================================================
+# Structure and closure
+# ===========================================================================
+
+[case.forged_root_model]
+expect = 'HCC-TREE-14'
+resealed = true
+edit = 'Flip a byte of the model hash the root record names.'
+note = 'The proof is about a model the verifier did not build from the instance. Everything after this point could be perfectly sound about a different problem.'
+
+[case.swapped_claim_kind]
+expect = 'HCC-CLAIM-01'
+resealed = true
+edit = 'Change the kind in the claim record and leave the header alone.'
+note = 'Two statements of the same thing, edited apart. The shape an edit made with a hex editor takes, and the reason the header states the kind at all.'
+
+[case.invented_lower_bound]
+expect = 'HCC-CLAIM-10'
+resealed = true
+edit = 'Attach a lower bound to an optimal claim, which carries none.'
+note = 'An optimal claim has its bound equal to its objective and states one number, not two. A second number is either redundant or a lie, and the format does not carry it either way.'
+
+# ===========================================================================
+# The reader
+# ===========================================================================
+
+[case.flipped_byte]
+expect = 'HCC-PARSE-09'
+resealed = false
+edit = 'Flip one bit in the middle of the record stream.'
+note = 'Not resealed, deliberately. This entry pins the checksum, whose only job is to make a corrupted file diagnose as corrupted rather than as an unsound inference.'
+
+[case.truncated_stream]
+expect = 'HCC-PARSE-07'
+resealed = true
+edit = 'Remove the last eight bytes and repair the checksum over what remains.'
+note = 'The declared length no longer matches what is present. Reported as truncation rather than as a malformed record, because that is what it is.'
+
+[case.trailing_bytes]
+expect = 'HCC-PARSE-08'
+resealed = true
+edit = 'Insert a byte between the terminating record and the checksum, repairing the declared length so the header arithmetic is not what answers.'
+note = 'A stream that continues past its terminator has something in it nobody accounted for, and there is no forward-compatible ignore rule in proof data.'
+
+[case.unknown_record_type]
+expect = 'HCC-PARSE-10'
+resealed = true
+edit = 'Change the first record type byte to one outside the closed list.'
+note = 'Unknown record types are refused rather than skipped. Proof records are not independent: every one of them changes what the later ones mean.'
+
+[case.reattached_certificate]
+expect = 'HCC-PARSE-03'
+resealed = true
+edit = 'Leave the certificate untouched and offer it against a different instance.'
+note = 'The cheapest forgery there is, and the one the instance digest in the header exists to stop. It is refused before any record is read.'

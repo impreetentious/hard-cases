@@ -103,6 +103,7 @@ shows the machinery that catches it.
 - [`spec/`](spec/) — the inert proof calculus: canonicalization, rules,
   rejection identifiers, and hand-worked vectors. Code is never the source of
   truth
+- [`tamper/README.md`](tamper/README.md) — the corrupted-certificate corpus
 
 ## Contributing
 
@@ -122,4 +123,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.5.4
+**Version:** v0.5.5
