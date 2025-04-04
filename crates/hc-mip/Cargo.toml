@@ -1,0 +1,21 @@
+[package]
+name = "hc-mip"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+# The search screens candidate incumbents exactly, against the original model,
+# before any of them is allowed to prune anything. That is the reason for this
+# edge and the only reason.
+hc-exact = { path = "../hc-exact" }
+hc-lp = { path = "../hc-lp" }
+
+[dev-dependencies]
+hc-io = { path = "../hc-io" }
+
+[lints]
+workspace = true

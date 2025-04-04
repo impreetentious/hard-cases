@@ -110,6 +110,38 @@ impl Working {
         }
     }
 
+    /// A copy with some columns' bounds narrowed.
+    ///
+    /// This is how a search node differs from its parent. A branch does not
+    /// change the model — the model is the theorem — it changes the region a
+    /// particular subproblem is allowed to look in, and the honest way to
+    /// express that is a working copy with tighter bounds and everything else
+    /// identical.
+    ///
+    /// Narrowing only. A request that would widen a bound is ignored rather
+    /// than applied, because a node that could relax its parent's assumptions
+    /// would break the one property the tree's correctness rests on: that the
+    /// children partition the parent.
+    ///
+    /// The digest is carried through unchanged. It names the file the model
+    /// came from, and a subproblem of that model is still about that file.
+    #[must_use]
+    pub fn narrowed(&self, bounds: &[(usize, f64, f64)]) -> Self {
+        let mut copy = self.clone();
+        for (column, low, high) in bounds {
+            if *column >= copy.lower.len() {
+                continue;
+            }
+            if *low > copy.lower[*column] {
+                copy.lower[*column] = *low;
+            }
+            if *high < copy.upper[*column] {
+                copy.upper[*column] = *high;
+            }
+        }
+        copy
+    }
+
     /// The number of rows, which is also the size of every basis.
     #[must_use]
     pub fn rows(&self) -> usize {
@@ -321,6 +353,57 @@ impl Working {
 /// A bound in the working copy, or the infinity that stands for its absence.
 fn bound(value: Option<&Rational>, absent: f64) -> f64 {
     value.map_or(absent, Rational::to_binary64)
+}
+
+#[cfg(test)]
+mod narrowing_tests {
+    use super::*;
+    use hc_core::Model;
+    use hc_io::mps::{Form, read};
+
+    const TINY: &[u8] = include_bytes!("../../../spec/v1/vectors/mps/tiny.mps");
+
+    fn model() -> Model {
+        read(TINY, Form::Fixed).expect("the frozen instance parses")
+    }
+
+    #[test]
+    fn narrowing_tightens_and_leaves_everything_else_alone() {
+        let working = Working::from_model(&model());
+        let child = working.narrowed(&[(0, 2.0, 3.0)]);
+        assert_eq!(child.lower(0), 2.0);
+        assert_eq!(child.upper(0), 3.0);
+        assert_eq!(child.rows(), working.rows());
+        assert_eq!(child.columns(), working.columns());
+        assert_eq!(child.cost(0), working.cost(0));
+        assert_eq!(child.digest(), working.digest());
+    }
+
+    #[test]
+    fn a_request_that_would_widen_a_bound_is_ignored() {
+        let working = Working::from_model(&model());
+        let (low, high) = (working.lower(0), working.upper(0));
+        let child = working.narrowed(&[(0, low - 100.0, high + 100.0)]);
+        assert_eq!(child.lower(0), low);
+        assert_eq!(child.upper(0), high);
+    }
+
+    #[test]
+    fn narrowing_composes_so_a_path_of_assumptions_accumulates() {
+        let working = Working::from_model(&model());
+        let child = working
+            .narrowed(&[(0, 1.0, 8.0)])
+            .narrowed(&[(0, 3.0, 5.0)]);
+        assert_eq!(child.lower(0), 3.0);
+        assert_eq!(child.upper(0), 5.0);
+    }
+
+    #[test]
+    fn a_column_that_does_not_exist_is_ignored_rather_than_a_panic() {
+        let working = Working::from_model(&model());
+        let child = working.narrowed(&[(9_999, 0.0, 1.0)]);
+        assert_eq!(child.columns(), working.columns());
+    }
 }
 
 #[cfg(test)]

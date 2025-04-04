@@ -15,6 +15,7 @@
 //! comparison is applying without going to look it up.
 
 pub mod basis;
+pub mod exact;
 pub mod inverse;
 pub mod lu;
 pub mod pricing;
@@ -26,6 +27,9 @@ pub mod sparse;
 pub mod working;
 
 pub use basis::{Basis, Status};
+pub use exact::{
+    Canonical, Failure, Gap, System, Wanted, exact_multipliers, exact_point, resting_value,
+};
 pub use inverse::{Inverse, Reason, Unstable};
 pub use lu::{Factorization, Singular};
 pub use pricing::{Entering, Pricing, Rule};
@@ -35,5 +39,3 @@ pub use scale::Scaling;
 pub use simplex::{Effort, Options, Outcome, solve, solve_from};
 pub use sparse::{SparseVec, Workspace};
 pub use working::{Kind, Working};
-
-pub mod exact;
