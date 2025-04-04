@@ -94,6 +94,36 @@ pub const CASES: &[Case] = &[
         resealed: true,
     },
     Case {
+        name: "dropped_leaf",
+        expect: "HCC-TREE-06",
+        resealed: true,
+    },
+    Case {
+        name: "dropped_branch",
+        expect: "HCC-TREE-05",
+        resealed: true,
+    },
+    Case {
+        name: "fractional_split",
+        expect: "HCC-TREE-02",
+        resealed: true,
+    },
+    Case {
+        name: "leaf_cites_another_node",
+        expect: "HCC-TREE-08",
+        resealed: true,
+    },
+    Case {
+        name: "moved_integral_point",
+        expect: "HCC-TREE-09",
+        resealed: true,
+    },
+    Case {
+        name: "forged_frontier",
+        expect: "HCC-TREE-12",
+        resealed: true,
+    },
+    Case {
         name: "flipped_byte",
         expect: "HCC-PARSE-09",
         resealed: false,
@@ -323,6 +353,109 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
                 return Err(NotApplicable);
             }
         }
+        "dropped_leaf" => {
+            // A node the certificate stops accounting for. The cover is
+            // incomplete and the region that leaf covered could hold anything.
+            let at = records
+                .iter()
+                .position(|record| {
+                    matches!(
+                        record,
+                        Record::LeafBound { .. }
+                            | Record::LeafInfeas { .. }
+                            | Record::LeafIntegral { .. }
+                            | Record::LeafFrontier { .. }
+                    )
+                })
+                .ok_or(NotApplicable)?;
+            excise(records, at);
+        }
+        "dropped_branch" => {
+            // The split that created two nodes, deleted. Their leaves now name
+            // nodes that were never created.
+            let at = records
+                .iter()
+                .position(|record| matches!(record, Record::Branch { .. }))
+                .ok_or(NotApplicable)?;
+            excise(records, at);
+        }
+        "fractional_split" => {
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::Branch { split, .. } = record {
+                    if !touched {
+                        *split = split.add(&half());
+                        touched = true;
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "leaf_cites_another_node" => {
+            // A leaf pointed at an inference made somewhere else in the tree.
+            // The inference is sound; it is about a different region.
+            let nodes: Vec<u64> = records
+                .iter()
+                .filter_map(|record| match record {
+                    Record::DualBound { node, .. } => Some(*node),
+                    _ => None,
+                })
+                .collect();
+            if nodes.len() < 2 {
+                return Err(NotApplicable);
+            }
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::LeafBound { node, .. } | Record::LeafFrontier { node, .. } = record {
+                    if !touched {
+                        if let Some(other) = nodes.iter().find(|candidate| *candidate != node) {
+                            *node = *other;
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "moved_integral_point" => {
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::LeafIntegral { point, .. } = record {
+                    if !touched {
+                        if let Some(first) = point.first_mut() {
+                            *first = first.add(&Rational::from_i64(1_000));
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "forged_frontier" => {
+            // A closed node presented as still open, which would turn a
+            // complete proof of optimality into a manufactured gap.
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::LeafBound { node, bound } = record {
+                    if !touched {
+                        *record = Record::LeafFrontier {
+                            node: *node,
+                            bound: *bound,
+                        };
+                        touched = true;
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
         "dropped_incumbent" => {
             let before = records.len();
             records.retain(|record| !matches!(record, Record::Incumbent { .. }));
@@ -344,6 +477,33 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         .collect();
     certificate.records = Certificate::terminated(without_end);
     Ok(certificate)
+}
+
+/// Removes a record and renumbers every citation that pointed past it.
+///
+/// A record's identifier is its position, so deleting one shifts everything
+/// after it. A forger who deleted without renumbering would produce a stream
+/// the reader refuses for a citation error, which would test the reader rather
+/// than the rule the case is about. This is the mutation done properly.
+fn excise(records: &mut Vec<Record>, at: usize) {
+    records.remove(at);
+    let boundary = at as u64;
+    for record in records.iter_mut() {
+        let cited = match record {
+            Record::LeafBound { bound, .. } | Record::LeafFrontier { bound, .. } => bound,
+            Record::LeafIntegral { bound, .. } => bound,
+            Record::LeafInfeas { contradiction, .. } => contradiction,
+            _ => continue,
+        };
+        if *cited > boundary {
+            *cited -= 1;
+        }
+    }
+}
+
+/// One half, for the fractional-split mutation.
+fn half() -> Rational {
+    Rational::new(BigInt::from_i64(1), BigInt::from_i64(2)).expect("a nonzero denominator")
 }
 
 /// Which inference kind a mutation is about.

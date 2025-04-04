@@ -108,6 +108,46 @@ edit = 'Attach a lower bound to an optimal claim, which carries none.'
 note = 'An optimal claim has its bound equal to its objective and states one number, not two. A second number is either redundant or a lie, and the format does not carry it either way.'
 
 # ===========================================================================
+# The recursive cover
+# ===========================================================================
+
+[case.dropped_leaf]
+expect = 'HCC-TREE-06'
+resealed = true
+edit = 'Delete the first leaf record.'
+note = 'A node the certificate stops accounting for. The region that leaf covered is no longer claimed about by anything, and a cover with a hole in it is not a cover. This is the tamper the recursive check exists for.'
+
+[case.dropped_branch]
+expect = 'HCC-TREE-05'
+resealed = true
+edit = 'Delete the first branch record.'
+note = 'The split that created two nodes, removed. Their leaves now name nodes nothing ever created, which is what an orphan subtree looks like from the reader side.'
+
+[case.fractional_split]
+expect = 'HCC-TREE-02'
+resealed = true
+edit = 'Add one half to a branch split value.'
+note = 'The two children of a split cover their parent only because the split is an integer: x <= k and x >= k + 1 leave nothing between them. At a fraction they leave a gap, and every integer point in it escapes the proof.'
+
+[case.leaf_cites_another_node]
+expect = 'HCC-TREE-08'
+resealed = true
+edit = 'Point a leaf at an inference made at a different node.'
+note = 'The inference is sound and it is about somewhere else. A bound proved in one region says nothing about another, and this is the shape a copied-and-pasted proof takes.'
+
+[case.moved_integral_point]
+expect = 'HCC-TREE-09'
+resealed = true
+edit = 'Move the first component of an integral leaf far outside the model.'
+note = 'An integral leaf claims a point that is feasible and attains the node bound. The point is checked against the model, not taken on the certificate word.'
+
+[case.forged_frontier]
+expect = 'HCC-TREE-12'
+resealed = true
+edit = 'Present a closed node as an open one.'
+note = 'A closed leaf relabelled as a frontier would turn a complete proof of optimality into a partial result with a manufactured gap. A frontier whose bound already meets the incumbent is not a frontier, and saying so is what stops a gap being invented out of a node that was actually closed.'
+
+# ===========================================================================
 # The reader
 # ===========================================================================
 

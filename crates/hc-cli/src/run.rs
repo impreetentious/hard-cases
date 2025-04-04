@@ -12,9 +12,12 @@
 //! footnote somewhere else.
 
 use hc_cert::assemble::assemble_lp;
+use hc_cert::explain::tree;
+use hc_cert::mip::assemble_mip;
 use hc_core::{Model, Tol};
 use hc_io::mps::{Form, read};
 use hc_lp::{Effort, Options, Outcome, Problem, Working, solve};
+use hc_mip::search::{Options as MipOptions, run as search_tree};
 use hc_verify::vcli::{accepted, refused};
 use hc_verify::vclose::verify;
 
@@ -143,6 +146,43 @@ pub fn certify(
     }
 }
 
+/// `hc explain`: the proof, drawn.
+///
+/// The tree is rendered from the certificate rather than from the search, and
+/// it is rendered only after the verifier has accepted it. An explanation of a
+/// proof nobody checked would be an explanation of a hypothesis.
+#[must_use]
+pub fn explain(instance_name: &str, raw: &[u8]) -> (String, Ending) {
+    let model = match parse_instance(raw) {
+        Ok(model) => model,
+        Err(message) => return (format!("REFUSED: {message}\n"), Ending::Refused),
+    };
+    let search = search_tree(&model, &MipOptions::default());
+    let assembled = match assemble_mip(&model, raw, &search) {
+        Ok(assembled) => assembled,
+        Err(reason) => {
+            return (format!("no certificate: {reason}\n"), Ending::Refused);
+        }
+    };
+    let bytes = assembled.encode();
+    match verify(&bytes, raw) {
+        Err(refusal) => (refused(&refusal), Ending::Refused),
+        Ok(verdict) => {
+            let mut out = tree(&assembled);
+            let _ = core::fmt::Write::write_fmt(
+                &mut out,
+                format_args!(
+                    "verified: {} bytes, {} work units, widest rational {} bits\n",
+                    verdict.bytes, verdict.work, verdict.peak_bits
+                ),
+            );
+            let _ =
+                core::fmt::Write::write_fmt(&mut out, format_args!("instance: {instance_name}\n"));
+            (out, Ending::Fine)
+        }
+    }
+}
+
 /// `hc verify`: the wrapper, which must print what the standalone binary
 /// prints, byte for byte.
 #[must_use]
@@ -214,6 +254,23 @@ mod tests {
             wrapper,
             accepted("tiny.mps", TINY.len(), "tiny.hcc", &verdict)
         );
+    }
+
+    #[test]
+    fn explaining_an_instance_draws_a_tree_the_verifier_accepted() {
+        let (out, ending) = explain("tiny.mps", TINY);
+        assert_eq!(ending, Ending::Fine);
+        assert!(out.starts_with("node 0  "));
+        assert!(out.contains("claim: optimal"));
+        assert!(out.contains("verified: "));
+        assert!(out.is_ascii());
+    }
+
+    #[test]
+    fn explaining_something_that_is_not_an_instance_refuses() {
+        let (out, ending) = explain("junk", b"not an instance\n");
+        assert_eq!(ending, Ending::Refused);
+        assert!(out.starts_with("REFUSED: "));
     }
 
     #[test]

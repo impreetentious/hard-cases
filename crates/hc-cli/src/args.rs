@@ -29,6 +29,11 @@ pub enum Command {
         /// The instance file.
         instance: String,
     },
+    /// Solve an instance and print the proof its certificate contains.
+    Explain {
+        /// The instance file.
+        instance: String,
+    },
     /// Print the trust-boundary receipt for a verifier source tree.
     Receipt {
         /// The crate directory to measure.
@@ -44,6 +49,7 @@ usage:
   hc solve <instance> [--cert <file>] [--no-cert]
   hc verify <certificate> --instance <file>
   hc check <instance>
+  hc explain <instance>
   hc receipt [<verifier crate directory>]
   hc --version
 
@@ -51,6 +57,9 @@ solve   reads an instance, solves it, rebuilds the result exactly, and has the
         independent verifier recheck the certificate before reporting a status.
 verify  runs that verifier alone, which is what a release script does.
 check   prints the canonical form of an instance and nothing else.
+explain solves, certifies, verifies, and prints the proof tree the certificate
+        contains. Every line of it comes from the certificate, so a line is
+        something the verifier checked.
 receipt measures the trusted base: files, counted lines, source hash,
         declared dependencies, and uses of unsafe code.
 ";
@@ -68,6 +77,12 @@ pub fn parse(arguments: &[String]) -> Option<Command> {
                 root: "crates/hc-verify".to_owned(),
             }),
             [root] if !root.starts_with('-') => Some(Command::Receipt { root: root.clone() }),
+            _ => None,
+        },
+        "explain" => match rest {
+            [instance] if !instance.starts_with('-') => Some(Command::Explain {
+                instance: instance.clone(),
+            }),
             _ => None,
         },
         "check" => match rest {
@@ -204,6 +219,18 @@ mod tests {
     }
 
     #[test]
+    fn explain_takes_one_instance_and_nothing_else() {
+        assert_eq!(
+            parse(&words(&["explain", "m.mps"])),
+            Some(Command::Explain {
+                instance: "m.mps".to_owned()
+            })
+        );
+        assert_eq!(parse(&words(&["explain"])), None);
+        assert_eq!(parse(&words(&["explain", "m.mps", "--tree"])), None);
+    }
+
+    #[test]
     fn the_receipt_defaults_to_the_verifier_and_accepts_one_path() {
         assert_eq!(
             parse(&words(&["receipt"])),
@@ -228,7 +255,6 @@ mod tests {
 
     #[test]
     fn an_unknown_subcommand_or_option_stops_rather_than_being_skipped() {
-        assert_eq!(parse(&words(&["explain", "model.mps"])), None);
         assert_eq!(parse(&words(&["solve", "model.mps", "--fast"])), None);
         assert_eq!(parse(&words(&["check", "--all"])), None);
         assert_eq!(parse(&[]), None);

@@ -34,6 +34,14 @@ fn main() -> ExitCode {
             print!("{}", hc_bench::receipt::of(&directory).render());
             code(Ending::Fine)
         }
+        Command::Explain { instance } => match slurp(&instance) {
+            Err(ending) => code(ending),
+            Ok(bytes) => {
+                let (out, ending) = run::explain(&instance, &bytes);
+                print!("{out}");
+                code(ending)
+            }
+        },
         Command::Check { instance } => match slurp(&instance) {
             Err(ending) => code(ending),
             Ok(bytes) => {
