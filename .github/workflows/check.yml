@@ -33,4 +33,7 @@ jobs:
       # optimizations. A hundred thousand generated instances, each solved,
       # rebuilt exactly, and rechecked by the standalone verifier.
       - run: cargo test --release -p hc-bench --test certification -- --ignored
+      # Tiny integer programs answered three ways: by the search, by looking at
+      # every point, and by the standalone verifier replaying the tree.
+      - run: cargo test --release -p hc-bench --test tiny_milp -- --ignored
       - run: cargo doc --workspace --no-deps

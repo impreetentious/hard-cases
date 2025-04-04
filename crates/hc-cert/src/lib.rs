@@ -22,7 +22,6 @@
 //! exists to produce something worth checking, not to be believed.
 
 pub mod assemble;
-pub mod explain;
 pub mod hcc;
 pub mod lp;
 pub mod mip;

@@ -17,6 +17,7 @@ hc-lp = { path = "../hc-lp" }
 # them the way the solver does. It never verifies one; that is the other
 # side's job and the whole point of the exercise.
 hc-cert = { path = "../hc-cert" }
+hc-mip = { path = "../hc-mip" }
 
 # The proof campaign hands every certificate it assembles to the standalone
 # verifier, which is a caller using a public interface. The edge runs one way

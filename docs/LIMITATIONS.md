@@ -51,14 +51,37 @@ Certificates for linear programs: an optimal claim, an infeasibility, an
 original-space unbounded ray, a certified gap between an exact bound and an
 exact point, and a point carrying no bound at all.
 
+Certificates for cut-free branch-and-bound trees: the recursive cover, replayed
+iteratively with an explicit depth cap so a legal proof deeper than the process
+call stack is checked rather than crashed on. Every node must have one parent
+and be reachable from the root, every node must be either branched or terminated
+exactly once, every leaf must cite an inference made at its own node, and every
+branch must split a declared integer variable at an exact integer.
+
 ## What the verifier does not check yet
 
-Presolve transform replay, cut derivations, and the recursive branch-tree cover.
-A certificate carrying any of those records is **refused**, and refused with a
-message saying that this implementation does not close it — see
+Presolve transform replay and cut derivations. A certificate carrying either of
+those records is **refused**, and refused with a message saying that this
+implementation does not close it — see
 [ADR-0010](adr/0010-a-verifier-refuses-what-it-cannot-check.md) for why that is
 a refusal rather than a skip. Each of those rules brings its own hand-worked
 vectors when it lands.
+
+## What the campaigns establish
+
+Two campaigns run on every change and again at a larger size in the scheduled
+build. The certification campaign generates linear programs, solves them,
+assembles certificates, and requires the standalone verifier to accept every one
+and the accepted claim to agree with a dense reference solver. The tiny
+integer campaign does the same for small integer programs and adds a third
+answer: enumeration over every point in the box, which shares no idea with the
+search at all.
+
+They establish that the implementations agree on the instances generated. They
+do not establish anything about instances outside those shapes, and both
+campaigns publish what they saw — how many of each claim, and how often
+assembly declined — so that a run which quietly stopped certifying would be
+visible rather than clean.
 
 ## What the tamper corpus establishes
 
