@@ -10,6 +10,10 @@ publish = false
 hc-core = { path = "../hc-core" }
 hc-exact = { path = "../hc-exact" }
 hc-lp = { path = "../hc-lp" }
+# The tree a certificate serializes is the tree the search built, in the order
+# it built it. Reading it here rather than rebuilding it is what keeps the
+# proof an account of what happened.
+hc-mip = { path = "../hc-mip" }
 
 [dev-dependencies]
 hc-io = { path = "../hc-io" }

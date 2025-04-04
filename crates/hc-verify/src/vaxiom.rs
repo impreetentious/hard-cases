@@ -54,6 +54,13 @@ impl Inequality {
 pub struct Axioms<'a> {
     instance: &'a Instance,
     rows: Vec<Vec<(u32, Frac)>>,
+    /// Inequalities introduced by the certificate rather than by the model.
+    ///
+    /// Branch assumptions and, later, cuts. They take identifiers above the
+    /// model's base block, assigned in certificate record order, which is what
+    /// lets both implementations compute the same identifiers without either
+    /// telling the other.
+    extra: Vec<Inequality>,
 }
 
 impl<'a> Axioms<'a> {
@@ -76,13 +83,37 @@ impl<'a> Axioms<'a> {
         for row in &mut rows {
             row.sort_by_key(|(column, _)| *column);
         }
-        Self { instance, rows }
+        Self {
+            instance,
+            rows,
+            extra: Vec::new(),
+        }
     }
 
-    /// How many inequalities the model has.
+    /// The number of inequalities the model itself supplies.
+    ///
+    /// Everything at or above this is something the certificate introduced.
+    #[must_use]
+    pub fn base(&self) -> u64 {
+        self.instance.axioms().len() as u64
+    }
+
+    /// Adds an inequality the certificate introduced, returning its
+    /// identifier.
+    ///
+    /// The identifier is the next one, and nothing may take it back. A record
+    /// stream that allocated identifiers in one order and cited them in
+    /// another would be a stream whose meaning depended on how it was read.
+    pub fn introduce(&mut self, inequality: Inequality) -> u64 {
+        let id = self.base() + self.extra.len() as u64;
+        self.extra.push(inequality);
+        id
+    }
+
+    /// How many inequalities exist, the introduced ones included.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.instance.axioms().len()
+        self.instance.axioms().len() + self.extra.len()
     }
 
     /// Whether the model has no inequalities at all.
@@ -97,6 +128,10 @@ impl<'a> Axioms<'a> {
     /// The inequality an identifier names, when it names one.
     #[must_use]
     pub fn get(&self, id: u64) -> Option<Inequality> {
+        if id >= self.base() {
+            let at = usize::try_from(id - self.base()).ok()?;
+            return self.extra.get(at).cloned();
+        }
         let at = usize::try_from(id).ok()?;
         let axiom = *self.instance.axioms().get(at)?;
         Some(match (axiom.from_row, axiom.face) {
@@ -293,6 +328,27 @@ mod tests {
         assert_eq!(high.right, whole(-10));
 
         assert!(axioms.get(3).is_none());
+    }
+
+    #[test]
+    fn an_introduced_inequality_takes_the_next_identifier_and_answers_to_it() {
+        let instance = model_a();
+        let mut axioms = Axioms::of(&instance);
+        let base = axioms.base();
+        assert_eq!(base, 3);
+
+        let id = axioms.introduce(Inequality {
+            terms: vec![(0, whole(-1))],
+            right: whole(-2),
+        });
+        assert_eq!(id, base);
+        assert_eq!(axioms.len(), 4);
+        let introduced = axioms.get(id).expect("the introduced inequality");
+        assert_eq!(introduced.right, whole(-2));
+        assert!(axioms.get(base + 1).is_none());
+
+        // The model's own inequalities are untouched by the introduction.
+        assert_eq!(axioms.get(0).expect("the row side").right, whole(-4));
     }
 
     #[test]

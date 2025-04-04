@@ -122,7 +122,7 @@ pub fn verify(certificate: &[u8], instance: &[u8]) -> Result<Verdict, Rejected> 
 ///
 /// Returns [`Rejected`] naming the earliest rule that refused.
 pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict, Rejected> {
-    let axioms = Axioms::of(model);
+    let mut axioms = Axioms::of(model);
     let hash = model_hash(model);
 
     // The claim record and the header must agree before either is used. They
@@ -143,6 +143,20 @@ pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict
                 kind.word()
             ),
         ));
+    }
+
+    if has_tree(proof) && matches!(kind, Claim::Optimal | Claim::Infeasible | Claim::Gap) {
+        return tree_close(
+            work,
+            proof,
+            model,
+            &mut axioms,
+            hash,
+            kind,
+            stated_objective.as_ref(),
+            stated_lower.as_ref(),
+            stated_gap.as_ref(),
+        );
     }
 
     match kind {
@@ -314,6 +328,163 @@ pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict
     }
 }
 
+/// Whether the stream carries any record that makes it a tree.
+fn has_tree(proof: &Proof) -> bool {
+    proof.steps.iter().any(|step| {
+        matches!(
+            step,
+            Step::Branch { .. }
+                | Step::LeafBound { .. }
+                | Step::LeafInfeas { .. }
+                | Step::LeafIntegral { .. }
+                | Step::LeafFrontier { .. }
+        )
+    })
+}
+
+/// Closes a mixed-integer claim by replaying its tree.
+///
+/// The tree establishes a cover; the incumbent supplies the value the cover is
+/// measured against. Both have to hold and neither is enough alone: a complete
+/// cover with no point proves a bound and claims optimality, and a point with
+/// an incomplete cover proves feasibility and claims nothing more.
+#[allow(clippy::too_many_arguments)]
+fn tree_close(
+    work: &mut Work,
+    proof: &Proof,
+    model: &Instance,
+    axioms: &mut Axioms<'_>,
+    hash: [u8; 32],
+    kind: Claim,
+    stated_objective: Option<&Frac>,
+    stated_lower: Option<&Frac>,
+    stated_gap: Option<&Frac>,
+) -> Result<Verdict, Rejected> {
+    rooted(proof, &hash)?;
+
+    // The incumbent first: every bound in the tree is measured against it, so
+    // it has to be established before any of them is read as a closure.
+    let upper = match incumbent(proof) {
+        Ok((original, stated)) => {
+            point_is_feasible(work, axioms, original)?;
+            let value = objective_is(work, axioms, original, stated)?;
+            if let Some(claimed) = stated_objective {
+                objective_is(work, axioms, original, claimed)?;
+            }
+            Some(value)
+        }
+        Err(missing) => {
+            if kind != Claim::Infeasible {
+                return Err(missing);
+            }
+            None
+        }
+    };
+
+    let replayed = crate::vtree::replay(work, proof, model, axioms, upper.as_ref())?;
+
+    match kind {
+        Claim::Infeasible => {
+            if !replayed.all_infeasible || replayed.open {
+                return Err(Rejected::new(
+                    Code::CLAIM_LEAF_NOT_INFEASIBLE,
+                    "an infeasible claim has a leaf that is not a contradiction",
+                ));
+            }
+            forbid(stated_objective, "an objective")?;
+            forbid(stated_lower, "a lower bound")?;
+            forbid(stated_gap, "a gap")?;
+            Ok(Verdict {
+                claim: kind,
+                objective: None,
+                lower: None,
+                gap: None,
+                model: hash,
+                bytes: proof.bytes,
+                work: work.units(),
+                peak_bits: work.peak_bits(),
+            })
+        }
+        Claim::Optimal => {
+            if replayed.open {
+                return Err(Rejected::new(
+                    Code::CLAIM_OPEN_FRONTIER,
+                    "an optimal claim leaves a node open",
+                ));
+            }
+            forbid(stated_lower, "a separate lower bound")?;
+            forbid(stated_gap, "a gap")?;
+            let value = upper.ok_or_else(|| {
+                Rejected::new(
+                    Code::CLAIM_WITNESS_MISSING,
+                    "an optimal claim carries no incumbent",
+                )
+            })?;
+            Ok(Verdict {
+                claim: kind,
+                objective: Some(value.clone()),
+                lower: Some(value),
+                gap: Some(Frac::zero()),
+                model: hash,
+                bytes: proof.bytes,
+                work: work.units(),
+                peak_bits: work.peak_bits(),
+            })
+        }
+        _ => {
+            let Some(lower) = replayed.frontier.clone() else {
+                return Err(Rejected::new(
+                    Code::CLAIM_NO_FRONTIER,
+                    "a gap claim has no open node",
+                ));
+            };
+            let value = upper.ok_or_else(|| {
+                Rejected::new(
+                    Code::CLAIM_WITNESS_MISSING,
+                    "a gap claim carries no incumbent",
+                )
+            })?;
+            let Some(claimed_lower) = stated_lower else {
+                return Err(Rejected::new(
+                    Code::CLAIM_WITNESS_MISSING,
+                    "a gap claim states no lower bound",
+                ));
+            };
+            if lower != *claimed_lower {
+                return Err(Rejected::new(
+                    Code::DUAL_BOUND_VALUE,
+                    format!(
+                        "the frontier is at {lower} and the certificate states {claimed_lower}"
+                    ),
+                ));
+            }
+            let gap = relative_gap(work, &value, &lower);
+            let Some(claimed_gap) = stated_gap else {
+                return Err(Rejected::new(
+                    Code::CLAIM_WITNESS_MISSING,
+                    "a gap claim states no gap",
+                ));
+            };
+            if gap != *claimed_gap {
+                return Err(Rejected::new(
+                    Code::CLAIM_GAP,
+                    format!("the recomputed gap is {gap} and the certificate states {claimed_gap}"),
+                ));
+            }
+            Ok(Verdict {
+                claim: kind,
+                objective: Some(value),
+                lower: Some(lower),
+                gap: Some(gap),
+                model: hash,
+                bytes: proof.bytes,
+                work: work.units(),
+                peak_bits: work.peak_bits(),
+            })
+        }
+    }
+}
+
 /// Refuses a value a claim is not entitled to state.
 fn forbid(value: Option<&Frac>, what: &str) -> Result<(), Rejected> {
     match value {
@@ -387,11 +558,6 @@ fn rooted(proof: &Proof, hash: &[u8; 32]) -> Result<(), Rejected> {
             step,
             Step::Transform { .. }
                 | Step::TransformContradiction { .. }
-                | Step::Branch { .. }
-                | Step::LeafBound { .. }
-                | Step::LeafInfeas { .. }
-                | Step::LeafIntegral { .. }
-                | Step::LeafFrontier { .. }
                 | Step::GmiCut { .. }
                 | Step::CoverCut { .. }
         ) {

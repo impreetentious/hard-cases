@@ -39,6 +39,7 @@ pub mod vreject;
 pub mod vrules;
 pub mod vspec;
 pub mod vtext;
+pub mod vtree;
 pub mod vwork;
 
 pub use vaxiom::{Axioms, Inequality, Sum};
@@ -57,4 +58,5 @@ pub use vrules::{
 };
 pub use vspec::{Asset, AssetError};
 pub use vtext::NumberError;
+pub use vtree::{Replay, replay};
 pub use vwork::Work;
