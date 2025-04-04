@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "hc-bench"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "hc-cert",
  "hc-core",
@@ -16,7 +16,7 @@ dependencies = [
 
 [[package]]
 name = "hc-cert"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -27,7 +27,7 @@ dependencies = [
 
 [[package]]
 name = "hc-cli"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "hc-bench",
  "hc-cert",
@@ -39,21 +39,21 @@ dependencies = [
 
 [[package]]
 name = "hc-core"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "hc-exact",
 ]
 
 [[package]]
 name = "hc-exact"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "hc-core",
 ]
 
 [[package]]
 name = "hc-io"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -62,7 +62,7 @@ dependencies = [
 
 [[package]]
 name = "hc-lp"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -71,4 +71,4 @@ dependencies = [
 
 [[package]]
 name = "hc-verify"
-version = "0.5.5"
+version = "0.6.0"

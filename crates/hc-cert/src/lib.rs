@@ -22,8 +22,6 @@
 //! exists to produce something worth checking, not to be believed.
 
 pub mod assemble;
-pub mod canonical;
-pub mod exact;
 pub mod hcc;
 pub mod lp;
 pub mod read;

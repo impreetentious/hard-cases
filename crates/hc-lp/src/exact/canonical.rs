@@ -22,6 +22,7 @@ pub struct Canonical {
     lower: Vec<Option<Rational>>,
     upper: Vec<Option<Rational>>,
     cost: Vec<Rational>,
+    integral: Vec<bool>,
     constant: Rational,
     digest: [u8; 32],
 }
@@ -36,6 +37,7 @@ impl Canonical {
         let mut lower = Vec::with_capacity(structural + row_count);
         let mut upper = Vec::with_capacity(structural + row_count);
         let mut cost = Vec::with_capacity(structural + row_count);
+        let mut integral = Vec::with_capacity(structural + row_count);
 
         for (index, variable) in model.variables().iter().enumerate() {
             columns.push(
@@ -48,6 +50,7 @@ impl Canonical {
             lower.push(variable.lower.clone());
             upper.push(variable.upper.clone());
             cost.push(variable.objective.clone());
+            integral.push(variable.integral);
         }
         for (index, row) in model.rows().iter().enumerate() {
             // The logical of a row is its activity, entering the system with a
@@ -57,6 +60,9 @@ impl Canonical {
             lower.push(row.lower.clone());
             upper.push(row.upper.clone());
             cost.push(Rational::zero());
+            // A logical variable is a row's activity. Declaring it integer
+            // would be a claim about the row that the model never made.
+            integral.push(false);
         }
 
         Self {
@@ -66,6 +72,7 @@ impl Canonical {
             lower,
             upper,
             cost,
+            integral,
             constant: model.objective_constant().clone(),
             digest: *model.digest(),
         }
@@ -105,6 +112,55 @@ impl Canonical {
     #[must_use]
     pub fn upper(&self, index: usize) -> Option<&Rational> {
         self.upper[index].as_ref()
+    }
+
+    /// A copy with some columns' bounds narrowed, exactly.
+    ///
+    /// The exact counterpart of the working copy's narrowing, and it exists
+    /// for the same reason: a search node differs from its parent by tighter
+    /// bounds and by nothing else. The two must agree about what a node's
+    /// region is, or the float search and the exact rebuild would be working
+    /// on different subproblems.
+    ///
+    /// Narrowing only, again. A request that would widen is ignored, because a
+    /// node able to relax its parent's assumptions would break the property
+    /// that the children partition the parent.
+    #[must_use]
+    pub fn narrowed(&self, bounds: &[(usize, Option<Rational>, Option<Rational>)]) -> Self {
+        let mut copy = self.clone();
+        for (column, low, high) in bounds {
+            if *column >= copy.lower.len() {
+                continue;
+            }
+            if let Some(value) = low {
+                let tighter = match &copy.lower[*column] {
+                    None => true,
+                    Some(seen) => value.cmp_value(seen).is_gt(),
+                };
+                if tighter {
+                    copy.lower[*column] = Some(value.clone());
+                }
+            }
+            if let Some(value) = high {
+                let tighter = match &copy.upper[*column] {
+                    None => true,
+                    Some(seen) => value.cmp_value(seen).is_lt(),
+                };
+                if tighter {
+                    copy.upper[*column] = Some(value.clone());
+                }
+            }
+        }
+        copy
+    }
+
+    /// Whether the model declares a column integer.
+    ///
+    /// Only structural columns can be, and this answers for every index so a
+    /// caller never has to remember which half of the vector it is looking at.
+    #[must_use]
+    pub fn is_integral(&self, index: usize) -> bool {
+        self.integral[index]
     }
 
     /// A column's exact objective coefficient.

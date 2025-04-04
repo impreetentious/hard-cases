@@ -20,9 +20,9 @@ use hc_exact::Rational;
 use hc_lp::Problem;
 use hc_lp::{Basis, Outcome, Status};
 
-use crate::canonical::Canonical;
 use crate::hcc::{Certificate, ClaimKind, Record};
 use crate::lp::{self, Axioms, Gap};
+use hc_lp::exact::{Canonical, System, rebuild};
 
 /// Why no certificate could be assembled.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,6 +72,16 @@ pub enum NoProof {
         /// The rate of change along the direction.
         rate: Rational,
     },
+    /// A node could not be closed and could not be given a bound.
+    ///
+    /// A tree holding one of these proves nothing about the region that node
+    /// covers, so there is no certificate to write and the node is named.
+    Unproved {
+        /// The node.
+        node: u64,
+        /// Why its rebuild declined.
+        reason: String,
+    },
     /// The search reached no conclusion worth certifying.
     NothingToCertify,
 }
@@ -95,6 +105,7 @@ impl NoProof {
             Self::BoundAboveObjective { .. } => "bound above the objective",
             Self::ContradictionNotPositive { .. } => "contradiction not positive",
             Self::RayDoesNotImprove { .. } => "ray does not improve",
+            Self::Unproved { .. } => "a node is unproved",
             Self::NothingToCertify => "nothing to certify",
         }
     }
@@ -104,6 +115,9 @@ impl core::fmt::Display for NoProof {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Rebuild(gap) => write!(formatter, "{gap}"),
+            Self::Unproved { node, reason } => {
+                write!(formatter, "node {node} is unproved: {reason}")
+            }
             Self::PointInfeasible { column } => {
                 write!(formatter, "column {column} is outside its bounds exactly")
             }
@@ -198,8 +212,8 @@ pub fn assemble_lp(
 
 /// The exact point a basis implies, checked against the model.
 fn checked_point(canonical: &Canonical, basis: &Basis) -> Result<Vec<Rational>, NoProof> {
-    let point = lp::exact_point(canonical, basis, &|column| {
-        lp::resting_value(canonical, basis, column)
+    let point = rebuild::exact_point(canonical, basis, &|column| {
+        rebuild::resting_value(canonical, basis, column)
     })
     .map_err(NoProof::Rebuild)?;
 
@@ -228,7 +242,8 @@ fn optimal_records(
     let costs: Vec<Rational> = (0..canonical.columns())
         .map(|index| canonical.cost(index).clone())
         .collect();
-    let multipliers = lp::exact_multipliers(canonical, basis, &costs).map_err(NoProof::Rebuild)?;
+    let multipliers =
+        rebuild::exact_multipliers(canonical, basis, &costs).map_err(NoProof::Rebuild)?;
     let target: Vec<Rational> = model
         .variables()
         .iter()
@@ -263,7 +278,7 @@ fn optimal_records(
             terms: inference
                 .terms
                 .iter()
-                .map(|(id, value)| (u64::from(id.0), value.clone()))
+                .map(|(id, value)| (*id, value.clone()))
                 .collect(),
         },
         Record::Incumbent {
@@ -303,8 +318,8 @@ fn infeasible_records(
 ) -> Result<Vec<Record>, NoProof> {
     // The first phase's objective, recomputed exactly rather than taken from
     // the search: which basic columns sit outside their bounds, and which way.
-    let point = lp::exact_point(canonical, basis, &|column| {
-        lp::resting_value(canonical, basis, column)
+    let point = rebuild::exact_point(canonical, basis, &|column| {
+        rebuild::resting_value(canonical, basis, column)
     })
     .map_err(NoProof::Rebuild)?;
 
@@ -318,7 +333,8 @@ fn infeasible_records(
         }
     }
 
-    let multipliers = lp::exact_multipliers(canonical, basis, &costs).map_err(NoProof::Rebuild)?;
+    let multipliers =
+        rebuild::exact_multipliers(canonical, basis, &costs).map_err(NoProof::Rebuild)?;
     let zero = vec![Rational::zero(); model.variables().len()];
     let inference = lp::assemble(model, axioms, &multipliers, &zero, &Rational::zero())
         .map_err(NoProof::Rebuild)?;
@@ -339,7 +355,7 @@ fn infeasible_records(
             terms: inference
                 .terms
                 .iter()
-                .map(|(id, value)| (u64::from(id.0), value.clone()))
+                .map(|(id, value)| (*id, value.clone()))
                 .collect(),
         },
         Record::Claim {
@@ -371,7 +387,7 @@ fn unbounded_records(
         .iter()
         .map(|index| canonical.column(*index).to_vec())
         .collect();
-    let system = crate::exact::System::from_columns(canonical.rows(), &columns)
+    let system = System::from_columns(canonical.rows(), &columns)
         .map_err(|failure| NoProof::Rebuild(Gap::Singular(failure)))?;
     let alpha = system
         .solve(&column)
@@ -538,11 +554,7 @@ mod tests {
                 _ => None,
             })
             .expect("a bound");
-        let converted: Vec<(hc_core::IneqId, Rational)> = terms
-            .iter()
-            .map(|(id, value)| (hc_core::IneqId(*id as u32), value.clone()))
-            .collect();
-        let (coefficients, right) = lp::recompute(&instance, &converted);
+        let (coefficients, right) = lp::recompute(&instance, &terms);
         let expected: Vec<Rational> = instance
             .variables()
             .iter()
@@ -581,11 +593,7 @@ mod tests {
                 _ => None,
             })
             .expect("a contradiction");
-        let converted: Vec<(hc_core::IneqId, Rational)> = terms
-            .iter()
-            .map(|(id, value)| (hc_core::IneqId(*id as u32), value.clone()))
-            .collect();
-        let (coefficients, right) = lp::recompute(&instance, &converted);
+        let (coefficients, right) = lp::recompute(&instance, &terms);
         assert!(
             coefficients.iter().all(Rational::is_zero),
             "{coefficients:?}"

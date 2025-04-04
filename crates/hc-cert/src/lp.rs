@@ -22,77 +22,22 @@
 
 use hc_core::{IneqId, IneqSource, Model, RowId, Side, VarId};
 use hc_exact::Rational;
-use hc_lp::{Basis, Status};
-
-use crate::canonical::Canonical;
-use crate::exact::{Failure, System};
-
-/// Why an exact claim could not be assembled.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Gap {
-    /// The basis is singular in exact arithmetic.
-    ///
-    /// A basis can factor comfortably in floating point and be singular
-    /// exactly. That is not a defect in the search; it is the reason the
-    /// rebuild happens at all.
-    Singular(Failure),
-    /// A multiplier needs a bound the model does not have.
-    ///
-    /// The inference would have to cite an inequality that does not exist, so
-    /// there is no bound of this shape to be had.
-    NoSuchBound {
-        /// The canonical inequality that would have been needed.
-        wanted: Wanted,
-    },
-    /// A column sits outside its bounds, so the point is not feasible.
-    Infeasible {
-        /// The column at fault.
-        column: usize,
-    },
-}
-
-/// A canonical inequality an inference wanted and the model does not have.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Wanted {
-    /// A row's side.
-    Row(RowId, Side),
-    /// A variable's bound.
-    Var(VarId, Side),
-}
-
-impl core::fmt::Display for Gap {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Singular(inner) => write!(formatter, "{inner}"),
-            Self::NoSuchBound { wanted } => match wanted {
-                Wanted::Row(row, side) => {
-                    write!(formatter, "row {row} has no finite {side} side to cite")
-                }
-                Wanted::Var(variable, side) => {
-                    write!(
-                        formatter,
-                        "variable {variable} has no finite {side} bound to cite"
-                    )
-                }
-            },
-            Self::Infeasible { column } => {
-                write!(formatter, "column {column} sits outside its bounds")
-            }
-        }
-    }
-}
-
-impl core::error::Error for Gap {}
+pub use hc_lp::exact::{Gap, Wanted};
 
 /// Nonnegative multipliers over canonical inequalities, and what they prove.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Inference {
     /// The cited inequalities and their multipliers, in identifier order.
     ///
+    /// Identifiers are plain integers rather than the model's own type,
+    /// because a proof made at a search node may cite a branch assumption,
+    /// which is a canonical inequality with an identifier above the model's
+    /// base block and no counterpart in the model at all.
+    ///
     /// Every multiplier is strictly positive. A zero multiplier contributes
     /// nothing and would give one inference two encodings, so it is never
     /// stored.
-    pub terms: Vec<(IneqId, Rational)>,
+    pub terms: Vec<(u64, Rational)>,
     /// The value the multiplied right-hand sides sum to, plus the objective
     /// constant when the target was the objective.
     pub value: Rational,
@@ -165,90 +110,6 @@ impl Axioms {
     }
 }
 
-/// The exact point a basis implies.
-///
-/// The nonbasic columns take their resting values and the basic ones are
-/// whatever solves the system — computed here in rationals, so the answer is
-/// the vertex rather than a rounding of it.
-///
-/// # Errors
-///
-/// Returns [`Gap::Singular`] when the basis is singular in exact arithmetic.
-pub fn exact_point(
-    canonical: &Canonical,
-    basis: &Basis,
-    resting: &dyn Fn(usize) -> Option<Rational>,
-) -> Result<Vec<Rational>, Gap> {
-    let mut point = vec![Rational::zero(); canonical.columns()];
-    let mut target = vec![Rational::zero(); canonical.rows()];
-
-    for (column, slot) in point.iter_mut().enumerate() {
-        if basis.status(column).is_basic() {
-            continue;
-        }
-        let value = resting(column).unwrap_or_else(Rational::zero);
-        *slot = value.clone();
-        if value.is_zero() {
-            continue;
-        }
-        for (row, coefficient) in canonical.column(column) {
-            let slot = &mut target[*row as usize];
-            *slot = slot.sub(&coefficient.mul(&value));
-        }
-    }
-
-    let columns: Vec<Vec<(u32, Rational)>> = basis
-        .basic()
-        .iter()
-        .map(|column| canonical.column(*column).to_vec())
-        .collect();
-    let system = System::from_columns(canonical.rows(), &columns).map_err(Gap::Singular)?;
-    let basic = system.solve(&target).map_err(Gap::Singular)?;
-    for (position, column) in basis.basic().iter().enumerate() {
-        point[*column] = basic[position].clone();
-    }
-    Ok(point)
-}
-
-/// Where a nonbasic column rests, exactly, according to its status.
-#[must_use]
-pub fn resting_value(canonical: &Canonical, basis: &Basis, column: usize) -> Option<Rational> {
-    match basis.status(column) {
-        Status::Basic => None,
-        Status::AtLower | Status::Fixed => canonical.lower(column).cloned(),
-        Status::AtUpper => canonical.upper(column).cloned(),
-        Status::Free => Some(Rational::zero()),
-    }
-}
-
-/// The exact row multipliers a basis implies for a cost vector.
-///
-/// The cost vector is over every column, structural and logical alike, because
-/// the first phase's objective lives on the logical columns and the second
-/// phase's lives on the structural ones.
-///
-/// # Errors
-///
-/// Returns [`Gap::Singular`] when the basis is singular in exact arithmetic.
-pub fn exact_multipliers(
-    canonical: &Canonical,
-    basis: &Basis,
-    costs: &[Rational],
-) -> Result<Vec<Rational>, Gap> {
-    let columns: Vec<Vec<(u32, Rational)>> = basis
-        .basic()
-        .iter()
-        .map(|column| canonical.column(*column).to_vec())
-        .collect();
-    let system = System::from_columns(canonical.rows(), &columns).map_err(Gap::Singular)?;
-    let basic: Vec<Rational> = basis
-        .basic()
-        .iter()
-        .map(|column| costs[*column].clone())
-        .collect();
-    system.transposed().solve(&basic).map_err(Gap::Singular)
-}
-
 /// Builds nonnegative multipliers over the canonical inequalities whose
 /// coefficients sum to a target vector, and the bound they establish.
 ///
@@ -268,7 +129,90 @@ pub fn assemble(
     target: &[Rational],
     constant: &Rational,
 ) -> Result<Inference, Gap> {
-    let mut terms: Vec<(IneqId, Rational)> = Vec::new();
+    assemble_with(
+        &ModelBounds { model, axioms },
+        model.rows().len(),
+        model.variables().len(),
+        model.matrix(),
+        multipliers,
+        target,
+        constant,
+    )
+}
+
+/// One inequality a bound supplier offers: its identifier and its value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Supply {
+    /// The canonical inequality's identifier.
+    pub id: u64,
+    /// The right-hand side, as written in the model or the assumption.
+    pub bound: Rational,
+}
+
+/// Where the bounds an inference may cite come from.
+///
+/// At the root this is the model. At a search node it is the model overlaid
+/// with the branch assumptions on the path, because a node's effective bound on
+/// a branched variable is the assumption rather than anything the file said —
+/// and citing the file's bound there would be citing a weaker inequality than
+/// the one the arithmetic actually used.
+pub trait Bounds {
+    /// The inequality supplying a row's side, when there is one.
+    fn row(&self, row: RowId, side: Side) -> Option<Supply>;
+    /// The inequality supplying a variable's bound, when there is one.
+    fn var(&self, variable: VarId, side: Side) -> Option<Supply>;
+}
+
+/// The model's own bounds, which is what a root inference cites.
+pub struct ModelBounds<'a> {
+    /// The model.
+    pub model: &'a Model,
+    /// Its inequality index.
+    pub axioms: &'a Axioms,
+}
+
+impl Bounds for ModelBounds<'_> {
+    fn row(&self, row: RowId, side: Side) -> Option<Supply> {
+        let id = self.axioms.row(row, side)?;
+        let bound = match side {
+            Side::Lower => self.model.rows()[row.index()].lower.clone(),
+            Side::Upper => self.model.rows()[row.index()].upper.clone(),
+        }?;
+        Some(Supply {
+            id: u64::from(id.0),
+            bound,
+        })
+    }
+
+    fn var(&self, variable: VarId, side: Side) -> Option<Supply> {
+        let id = self.axioms.var(variable, side)?;
+        let bound = match side {
+            Side::Lower => self.model.variables()[variable.index()].lower.clone(),
+            Side::Upper => self.model.variables()[variable.index()].upper.clone(),
+        }?;
+        Some(Supply {
+            id: u64::from(id.0),
+            bound,
+        })
+    }
+}
+
+/// The general form: the same construction over any bound supplier.
+///
+/// # Errors
+///
+/// Returns [`Gap::NoSuchBound`] when a nonzero multiplier would have to cite an
+/// inequality the supplier does not offer.
+pub fn assemble_with(
+    bounds: &dyn Bounds,
+    rows: usize,
+    variables: usize,
+    matrix: &hc_core::Matrix,
+    multipliers: &[Rational],
+    target: &[Rational],
+    constant: &Rational,
+) -> Result<Inference, Gap> {
+    let mut terms: Vec<(u64, Rational)> = Vec::new();
     let mut value = constant.clone();
 
     // The row multipliers. A positive multiplier cites the row's lower side as
@@ -284,26 +228,19 @@ pub fn assemble(
         } else {
             Side::Upper
         };
-        let Some(id) = axioms.row(row, side) else {
+        let Some(supply) = bounds.row(row, side) else {
             return Err(Gap::NoSuchBound {
                 wanted: Wanted::Row(row, side),
             });
         };
-        let bound = match side {
-            Side::Lower => model.rows()[index].lower.clone(),
-            Side::Upper => model.rows()[index].upper.clone(),
-        }
-        .ok_or(Gap::NoSuchBound {
-            wanted: Wanted::Row(row, side),
-        })?;
-        terms.push((id, weight.abs()));
-        value = value.add(&weight.mul(&bound));
+        terms.push((supply.id, weight.abs()));
+        value = value.add(&weight.mul(&supply.bound));
     }
 
     // What the rows do not account for is made up by the variable bounds, one
     // per variable, with the same sign convention.
-    let by_row = model.matrix().by_row(model.rows().len());
-    let mut accounted = vec![Rational::zero(); model.variables().len()];
+    let by_row = matrix.by_row(rows);
+    let mut accounted = vec![Rational::zero(); variables];
     for (index, weight) in multipliers.iter().enumerate() {
         if weight.is_zero() {
             continue;
@@ -325,25 +262,18 @@ pub fn assemble(
         } else {
             Side::Upper
         };
-        let Some(id) = axioms.var(variable, side) else {
+        let Some(supply) = bounds.var(variable, side) else {
             return Err(Gap::NoSuchBound {
                 wanted: Wanted::Var(variable, side),
             });
         };
-        let bound = match side {
-            Side::Lower => model.variables()[index].lower.clone(),
-            Side::Upper => model.variables()[index].upper.clone(),
-        }
-        .ok_or(Gap::NoSuchBound {
-            wanted: Wanted::Var(variable, side),
-        })?;
-        terms.push((id, residual.abs()));
-        value = value.add(&residual.mul(&bound));
+        terms.push((supply.id, residual.abs()));
+        value = value.add(&residual.mul(&supply.bound));
     }
 
     // Identifier order, which is the order the format requires and which makes
     // one inference have one encoding.
-    terms.sort_by_key(|(id, _)| id.0);
+    terms.sort_by_key(|(id, _)| *id);
     Ok(Inference { terms, value })
 }
 
@@ -358,13 +288,20 @@ pub fn assemble(
 /// Returns the coefficient vector the terms sum to, so a caller can compare it
 /// against whatever it expected.
 #[must_use]
-pub fn recompute(model: &Model, terms: &[(IneqId, Rational)]) -> (Vec<Rational>, Rational) {
+pub fn recompute(model: &Model, terms: &[(u64, Rational)]) -> (Vec<Rational>, Rational) {
     let mut coefficients = vec![Rational::zero(); model.variables().len()];
     let mut right = Rational::zero();
     let by_row = model.matrix().by_row(model.rows().len());
 
     for (id, weight) in terms {
-        let Some(inequality) = model.inequality(*id) else {
+        // Identifiers above the model's base block name branch assumptions and
+        // cuts, which this recomputation does not know about. A caller
+        // checking a node inference uses the node-aware form; this one exists
+        // for the root, where every citation is the model's own.
+        let Ok(narrow) = u32::try_from(*id) else {
+            continue;
+        };
+        let Some(inequality) = model.inequality(IneqId(narrow)) else {
             continue;
         };
         let negate = inequality.side == Side::Upper;
@@ -414,6 +351,8 @@ pub fn recompute(model: &Model, terms: &[(IneqId, Rational)]) -> (Vec<Rational>,
 mod tests {
     use super::*;
     use hc_core::Tol;
+    use hc_lp::exact::{Canonical, exact_multipliers, exact_point, resting_value};
+    use hc_lp::{Basis, Status};
     use hc_lp::{Options, Outcome, Problem, Working};
 
     fn model(source: &str) -> Model {
@@ -553,7 +492,7 @@ mod tests {
 
         for pair in inference.terms.windows(2) {
             assert!(
-                pair[0].0.0 < pair[1].0.0,
+                pair[0].0 < pair[1].0,
                 "the terms are not in identifier order"
             );
         }
