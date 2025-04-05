@@ -16,7 +16,8 @@ use hc_cert::explain::tree;
 use hc_cert::mip::assemble_mip;
 use hc_core::{Model, Tol};
 use hc_io::mps::{Form, read};
-use hc_lp::{Effort, Options, Outcome, Problem, Working, solve};
+use hc_lp::dual::solve_from as solve_dual;
+use hc_lp::{Basis, Effort, Options, Outcome, Problem, Working, solve};
 use hc_mip::search::{Options as MipOptions, run as search_tree};
 use hc_verify::vcli::{accepted, refused};
 use hc_verify::vclose::verify;
@@ -58,6 +59,13 @@ pub struct Solved {
     pub outcome: Outcome,
     /// What the search spent.
     pub effort: Effort,
+    /// Which method actually ran.
+    ///
+    /// Reported rather than assumed. The dual method declines to start when
+    /// the logical basis does not price correctly, and a run that quietly fell
+    /// back to the primal while the caller believed otherwise would be a run
+    /// nobody could reason about.
+    pub method: &'static str,
 }
 
 /// Runs the search. No claim is made here.
@@ -65,15 +73,32 @@ pub struct Solved {
 /// # Errors
 ///
 /// Returns the message to print when the file is not a readable instance.
-pub fn search(raw: &[u8]) -> Result<Solved, String> {
+pub fn search(raw: &[u8], dual: bool) -> Result<Solved, String> {
     let model = parse_instance(raw)?;
     let working = Working::from_model(&model);
     let problem = Problem::scaled(&working, Tol::solver());
-    let (outcome, effort) = solve(&problem, &Options::default());
+
+    let attempt = if dual {
+        solve_dual(&problem, Basis::logical(&problem), &Options::default()).ok()
+    } else {
+        None
+    };
+    let (outcome, effort, method) = match attempt {
+        Some((outcome, effort)) => (outcome, effort, "dual"),
+        None => {
+            let (outcome, effort) = solve(&problem, &Options::default());
+            (
+                outcome,
+                effort,
+                if dual { "dual-declined" } else { "primal" },
+            )
+        }
+    };
     Ok(Solved {
         model,
         outcome,
         effort,
+        method,
     })
 }
 
@@ -94,8 +119,9 @@ pub fn effort_line(effort: &Effort) -> String {
 #[must_use]
 pub fn candidate(solved: &Solved) -> String {
     format!(
-        "{}\nstatus       candidate-{} (uncertified)\n",
+        "{}\nmethod       {}\nstatus       candidate-{} (uncertified)\n",
         effort_line(&solved.effort),
+        solved.method,
         solved.outcome.as_str()
     )
 }
@@ -131,6 +157,9 @@ pub fn certify(
         Ok(verdict) => {
             let mut out = accepted(instance_name, raw.len(), certificate_name, &verdict);
             out.push_str(&effort_line(&solved.effort));
+            out.push('\n');
+            out.push_str("method       ");
+            out.push_str(solved.method);
             out.push('\n');
             (out, Some(bytes), Ending::Fine)
         }
@@ -224,7 +253,7 @@ mod tests {
 
     #[test]
     fn a_solve_reports_only_what_the_verifier_accepted() {
-        let solved = search(TINY).expect("the frozen instance parses");
+        let solved = search(TINY, false).expect("the frozen instance parses");
         let (out, bytes, ending) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         assert_eq!(ending, Ending::Fine);
         assert!(bytes.is_some());
@@ -234,7 +263,7 @@ mod tests {
 
     #[test]
     fn refusing_to_certify_produces_a_candidate_that_says_it_is_one() {
-        let solved = search(TINY).expect("the frozen instance parses");
+        let solved = search(TINY, false).expect("the frozen instance parses");
         let out = candidate(&solved);
         assert!(out.contains("candidate-"));
         assert!(out.contains("(uncertified)"));
@@ -243,7 +272,7 @@ mod tests {
 
     #[test]
     fn the_wrapper_prints_exactly_what_the_library_renders() {
-        let solved = search(TINY).expect("the frozen instance parses");
+        let solved = search(TINY, false).expect("the frozen instance parses");
         let (_, bytes, _) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         let bytes = bytes.expect("a certificate");
         let (wrapper, ending) = recheck("tiny.hcc", &bytes, "tiny.mps", TINY);
@@ -254,6 +283,21 @@ mod tests {
             wrapper,
             accepted("tiny.mps", TINY.len(), "tiny.hcc", &verdict)
         );
+    }
+
+    #[test]
+    fn the_dual_method_reports_whether_it_actually_ran() {
+        let plain = search(TINY, false).expect("the frozen instance parses");
+        assert_eq!(plain.method, "primal");
+
+        let asked = search(TINY, true).expect("the frozen instance parses");
+        assert!(
+            asked.method == "dual" || asked.method == "dual-declined",
+            "a run that asked for the dual reported {}",
+            asked.method
+        );
+        // Whichever ran, the answer is the same one.
+        assert_eq!(plain.outcome.as_str(), asked.outcome.as_str());
     }
 
     #[test]
@@ -275,7 +319,7 @@ mod tests {
 
     #[test]
     fn a_certificate_bound_to_another_instance_is_refused_by_the_wrapper() {
-        let solved = search(TINY).expect("the frozen instance parses");
+        let solved = search(TINY, false).expect("the frozen instance parses");
         let (_, bytes, _) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         let bytes = bytes.expect("a certificate");
         let mut other = TINY.to_vec();

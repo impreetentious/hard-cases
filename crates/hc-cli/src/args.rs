@@ -16,6 +16,8 @@ pub enum Command {
         certificate: Option<String>,
         /// Whether to skip assembly entirely.
         no_certificate: bool,
+        /// Whether to solve by the dual method where it can start.
+        dual: bool,
     },
     /// Recheck a certificate against an instance.
     Verify {
@@ -46,7 +48,7 @@ pub enum Command {
 /// The usage text.
 pub const USAGE: &str = "\
 usage:
-  hc solve <instance> [--cert <file>] [--no-cert]
+  hc solve <instance> [--cert <file>] [--no-cert] [--dual]
   hc verify <certificate> --instance <file>
   hc check <instance>
   hc explain <instance>
@@ -99,6 +101,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
     let mut instance = None;
     let mut certificate = None;
     let mut no_certificate = false;
+    let mut dual = false;
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
@@ -114,6 +117,13 @@ fn solve(arguments: &[String]) -> Option<Command> {
                     return None;
                 }
                 no_certificate = true;
+                index += 1;
+            }
+            "--dual" => {
+                if dual {
+                    return None;
+                }
+                dual = true;
                 index += 1;
             }
             other if other.starts_with('-') => return None,
@@ -134,6 +144,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
         instance: instance?,
         certificate,
         no_certificate,
+        dual,
     })
 }
 
@@ -180,6 +191,7 @@ mod tests {
                 instance: "model.mps".to_owned(),
                 certificate: None,
                 no_certificate: false,
+                dual: false,
             })
         );
         assert_eq!(
@@ -188,8 +200,23 @@ mod tests {
                 instance: "model.mps".to_owned(),
                 certificate: Some("out.hcc".to_owned()),
                 no_certificate: false,
+                dual: false,
             })
         );
+    }
+
+    #[test]
+    fn the_dual_method_is_asked_for_by_name_and_only_once() {
+        assert_eq!(
+            parse(&words(&["solve", "m.mps", "--dual"])),
+            Some(Command::Solve {
+                instance: "m.mps".to_owned(),
+                certificate: None,
+                no_certificate: false,
+                dual: true,
+            })
+        );
+        assert_eq!(parse(&words(&["solve", "m.mps", "--dual", "--dual"])), None);
     }
 
     #[test]

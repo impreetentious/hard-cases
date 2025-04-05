@@ -29,6 +29,7 @@
 
 use hc_core::{Model, Tol};
 use hc_exact::Rational;
+use hc_lp::dual::solve_from as solve_dual;
 use hc_lp::exact::{Canonical, exact_multipliers, exact_point, resting_value};
 use hc_lp::{Basis, Options as LpOptions, Outcome as LpOutcome, Problem, Working, solve};
 
@@ -42,6 +43,14 @@ pub struct Options {
     pub node_limit: u64,
     /// The deepest a node may be.
     pub depth_limit: u32,
+    /// Whether a child starts from its parent's basis.
+    ///
+    /// A branch changes one bound and nothing else, so the parent's optimal
+    /// basis still prices every column correctly and the child is a dual
+    /// problem with a little primal infeasibility. Turning this off solves
+    /// every node from cold, which is slower and must reach the same answers —
+    /// that equivalence is what the warm-start trap checks.
+    pub warm_start: bool,
 }
 
 impl Default for Options {
@@ -49,6 +58,7 @@ impl Default for Options {
         Self {
             node_limit: 100_000,
             depth_limit: 64,
+            warm_start: true,
         }
     }
 }
@@ -188,6 +198,7 @@ pub fn run(model: &Model, options: &Options) -> Search {
         working: Working::from_model(model),
         root_exact: Canonical::of(model),
         tree: Tree::new(),
+        bases: vec![None],
         nodes: vec![None],
         incumbent: None,
         open: vec![0],
@@ -221,6 +232,8 @@ struct Walk {
     working: Working,
     root_exact: Canonical,
     tree: Tree,
+    /// The basis each node finished on, for its children to start from.
+    bases: Vec<Option<Basis>>,
     nodes: Vec<Option<Node>>,
     incumbent: Option<Incumbent>,
     open: Vec<u64>,
@@ -232,11 +245,39 @@ struct Walk {
 impl Walk {
     /// Solves one node's relaxation and decides what it means.
     fn visit(&mut self, id: u64, options: &Options) -> Node {
-        let depth = self.tree.get(id).expect("an open node exists").depth;
+        let entry = self.tree.get(id).expect("an open node exists");
+        let depth = entry.depth;
+        let parent = entry.parent;
         let narrowed = narrow(&self.working, &self.tree, id);
         let problem = Problem::scaled(&narrowed, Tol::solver());
-        let (outcome, effort) = solve(&problem, &LpOptions::default());
+
+        // The warm start, when there is one to use. A refusal is not a
+        // failure: it means the parent's basis does not satisfy the dual
+        // method's precondition against this child, and the honest response is
+        // to solve from cold rather than to repair a start into something the
+        // caller did not ask for.
+        let warm = if options.warm_start {
+            parent
+                .and_then(|at| self.bases.get(usize::try_from(at).ok()?).cloned().flatten())
+                .and_then(|start| solve_dual(&problem, start, &LpOptions::default()).ok())
+        } else {
+            None
+        };
+        let (outcome, effort) = match warm {
+            Some(result) => result,
+            None => solve(&problem, &LpOptions::default()),
+        };
         self.iterations += effort.iterations;
+
+        // Whatever basis the node finished on is what its children start from.
+        let finished = match &outcome {
+            LpOutcome::Optimal { basis, .. }
+            | LpOutcome::Infeasible { basis, .. }
+            | LpOutcome::Unbounded { basis, .. }
+            | LpOutcome::EffortLimit { basis, .. }
+            | LpOutcome::Numerical { basis, .. } => Some(basis.clone()),
+        };
+        self.remember(id, finished);
 
         // The exact view of the same subproblem, narrowed from the same path,
         // so the search and the rebuild are looking at one region.
@@ -339,6 +380,15 @@ impl Walk {
             self.nodes.push(None);
         }
         self.nodes[slot] = Some(result);
+    }
+
+    /// Files the basis a node finished on.
+    fn remember(&mut self, id: u64, basis: Option<Basis>) {
+        let slot = usize::try_from(id).expect("a node identifier fits");
+        while self.bases.len() <= slot {
+            self.bases.push(None);
+        }
+        self.bases[slot] = basis;
     }
 
     /// Turns the walk into what it found.

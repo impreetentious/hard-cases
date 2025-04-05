@@ -264,9 +264,63 @@ fn reference_name(outcome: &ref_lp::Outcome) -> &'static str {
     }
 }
 
-/// Runs a campaign and reports what it found.
+/// Compares the two simplex methods on one instance.
+///
+/// The dual method has a precondition the primal does not — its starting basis
+/// must price every column correctly — so on some instances it declines to
+/// start at all. That is reported as inconclusive rather than as agreement: a
+/// campaign that counted a refusal as a pass would report a perfect record for
+/// a method that never ran.
 #[must_use]
-pub fn run(seed: u64, rounds: usize) -> Report {
+pub fn compare_methods(model: &Model) -> (Verdict, String) {
+    let working = Working::from_model(model);
+    let problem = Problem::scaled(&working, Tol::solver());
+
+    let (primal, _) = hc_lp::solve(&problem, &Options::default());
+    let start = hc_lp::Basis::logical(&problem);
+    let Ok((dual, _)) = hc_lp::dual::solve_from(&problem, start, &Options::default()) else {
+        return (Verdict::Inconclusive, String::from("dual/declined"));
+    };
+
+    let pair = format!("{}/{}", primal.as_str(), dual.as_str());
+    if primal.as_str() != dual.as_str() {
+        return (
+            Verdict::Disagree(format!(
+                "the primal says {} and the dual says {}",
+                primal.as_str(),
+                dual.as_str()
+            )),
+            pair,
+        );
+    }
+
+    if let (
+        hc_lp::Outcome::Optimal {
+            objective: first, ..
+        },
+        hc_lp::Outcome::Optimal {
+            objective: second, ..
+        },
+    ) = (&primal, &dual)
+    {
+        let fence = AGREEMENT_FENCE * (1.0 + first.abs());
+        if (first - second).abs() > fence {
+            return (
+                Verdict::Disagree(format!("objectives {first} and {second}")),
+                pair,
+            );
+        }
+    }
+    (Verdict::Agree, pair)
+}
+
+/// Runs a campaign of one comparison over generated instances.
+///
+/// `which` decides what is being compared, so the two campaigns share the
+/// generator, the reporting, and the reproducibility rather than each growing
+/// their own copy of them.
+#[must_use]
+pub fn run_with(seed: u64, rounds: usize, which: &dyn Fn(&Model) -> (Verdict, String)) -> Report {
     let mut generator = Xoshiro256PlusPlus::from_seed(seed);
     let mut report = Report::default();
 
@@ -274,7 +328,7 @@ pub fn run(seed: u64, rounds: usize) -> Report {
         let rows = 1 + (round % 7);
         let columns = 1 + (round % 5);
         let instance = generate(&mut generator, rows, columns);
-        let (verdict, pair) = compare(&instance.model);
+        let (verdict, pair) = which(&instance.model);
         *report.statuses.entry(pair).or_insert(0) += 1;
         report.rounds += 1;
         match verdict {
@@ -289,6 +343,12 @@ pub fn run(seed: u64, rounds: usize) -> Report {
     }
 
     report
+}
+
+/// Runs a campaign and reports what it found.
+#[must_use]
+pub fn run(seed: u64, rounds: usize) -> Report {
+    run_with(seed, rounds, &compare)
 }
 
 #[cfg(test)]

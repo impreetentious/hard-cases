@@ -36,4 +36,6 @@ jobs:
       # Tiny integer programs answered three ways: by the search, by looking at
       # every point, and by the standalone verifier replaying the tree.
       - run: cargo test --release -p hc-bench --test tiny_milp -- --ignored
+      # The two simplex methods against each other on generated instances.
+      - run: cargo test --release -p hc-bench --test dual_campaign -- --ignored
       - run: cargo doc --workspace --no-deps

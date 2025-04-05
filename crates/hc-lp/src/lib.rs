@@ -15,6 +15,7 @@
 //! comparison is applying without going to look it up.
 
 pub mod basis;
+pub mod dual;
 pub mod exact;
 pub mod inverse;
 pub mod lu;
@@ -27,6 +28,7 @@ pub mod sparse;
 pub mod working;
 
 pub use basis::{Basis, Status};
+pub use dual::{NotDual, is_dual_feasible};
 pub use exact::{
     Canonical, Failure, Gap, System, Wanted, exact_multipliers, exact_point, resting_value,
 };
