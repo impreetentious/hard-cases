@@ -1,0 +1,23 @@
+[package]
+name = "hc-presolve"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+# Every transform's applicability condition, action, and both maps are exact.
+# A presolve that reasoned in floating point would be a reduction chain nobody
+# could replay, which is the thing this crate exists not to be.
+hc-exact = { path = "../hc-exact" }
+
+# The cross-implementation differential drives the verifier's own replay of
+# the same chain. A caller may use the verifier; the verifier may use nothing.
+[dev-dependencies]
+hc-io = { path = "../hc-io" }
+hc-verify = { path = "../hc-verify" }
+
+[lints]
+workspace = true
