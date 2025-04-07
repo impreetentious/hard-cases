@@ -14,6 +14,17 @@ use hc_core::{Model, RowId, VarId};
 use hc_exact::Rational;
 
 /// The exact model with its logical columns made explicit.
+/// One row added to an exact view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExactRow {
+    /// The terms, over the model's variables.
+    pub terms: Vec<(usize, Rational)>,
+    /// The lower side, where it has one.
+    pub low: Option<Rational>,
+    /// The upper side, where it has one.
+    pub high: Option<Rational>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Canonical {
     row_count: usize,
@@ -112,6 +123,47 @@ impl Canonical {
     #[must_use]
     pub fn upper(&self, index: usize) -> Option<&Rational> {
         self.upper[index].as_ref()
+    }
+
+    /// One extra row of the exact view: its terms and its two optional sides.
+    #[must_use]
+    pub fn extra_row(
+        terms: Vec<(usize, Rational)>,
+        low: Option<Rational>,
+        high: Option<Rational>,
+    ) -> ExactRow {
+        ExactRow { terms, low, high }
+    }
+
+    /// A copy with extra rows appended, exactly.
+    ///
+    /// The exact counterpart of the working copy's augmentation, and it exists
+    /// for the same reason: the two must agree about what problem a node is
+    /// solving. A cut is a row of the relaxation and never a row of the model,
+    /// so nothing already numbered moves.
+    #[must_use]
+    pub fn with_rows(&self, extra: &[ExactRow]) -> Self {
+        let mut copy = self.clone();
+        for ExactRow { terms, low, high } in extra {
+            let row = copy.row_count;
+            copy.row_count += 1;
+            for (column, value) in terms {
+                if *column >= copy.structural || value.is_zero() {
+                    continue;
+                }
+                copy.columns[*column].push((row as u32, value.clone()));
+                copy.columns[*column].sort_by_key(|(at, _)| *at);
+            }
+            // The logical column for the new row enters with a minus sign, as
+            // every logical does, and carries the row's own bounds.
+            copy.columns
+                .push(vec![(row as u32, Rational::from_i64(-1))]);
+            copy.lower.push(low.clone());
+            copy.upper.push(high.clone());
+            copy.cost.push(Rational::zero());
+            copy.integral.push(false);
+        }
+        copy
     }
 
     /// A copy with some columns' bounds narrowed, exactly.

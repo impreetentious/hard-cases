@@ -23,12 +23,26 @@
 //! there is not meant to be.
 
 use crate::vaxiom::{Axioms, Inequality};
+use crate::vcut::{View, cover, gomory};
 use crate::vhcc::{Proof, Step};
 use crate::vmodel::Instance;
 use crate::vrat::Frac;
 use crate::vreject::{Code, Rejected};
 use crate::vrules::{contradiction, dual_bound, objective_is, point_is_feasible};
 use crate::vwork::Work;
+
+/// One cut the replay has introduced.
+///
+/// The identifier it took, the node whose subtree it is true of, and the
+/// inequality itself — which is here because a later cut may be derived from
+/// it, exactly as one may be derived from a row of the model.
+#[derive(Clone, Debug)]
+struct PooledCut {
+    id: u64,
+    scope: u64,
+    terms: Vec<(u32, Frac)>,
+    right: Frac,
+}
 
 /// The deepest tree the replay will follow.
 pub const DEPTH_CAP: u32 = 100_000;
@@ -53,6 +67,12 @@ struct NodeState {
     depth: u32,
     /// The identifier of the inequality this node's assumption introduced.
     assumption: Option<u64>,
+    /// The bound the assumption narrows, as a column, a side, and a value.
+    ///
+    /// The same fact as the assumption inequality, in the shape a cut
+    /// derivation needs: a cut is built from the bounds in force at its node,
+    /// and those are the model's narrowed by the path.
+    narrowing: Option<(usize, bool, Frac)>,
     branched: bool,
     terminal: Option<Terminal>,
 }
@@ -91,6 +111,7 @@ pub fn replay(
         parent: None,
         depth: 0,
         assumption: None,
+        narrowing: None,
         branched: false,
         terminal: None,
     }];
@@ -103,6 +124,9 @@ pub fn replay(
     // What each inference record established, indexed by record identifier.
     let mut inferences: Vec<Option<(u64, Frac)>> = Vec::new();
     let mut contradictions: Vec<Option<u64>> = Vec::new();
+    // The cuts introduced so far, as an inequality identifier and the node
+    // whose subtree the cut may be used in.
+    let mut cuts: Vec<PooledCut> = Vec::new();
 
     for (position, step) in proof.steps.iter().enumerate() {
         let id = position as u64;
@@ -130,13 +154,68 @@ pub fn replay(
                     &mut nodes, axioms, model, *parent, *variable, split, *left, *right,
                 )?;
             }
+            Step::GmiCut {
+                scope,
+                combination,
+                isolated,
+                stated_coefficients,
+                stated_right,
+            } => {
+                let view = at_node(&nodes, model, &cuts, *scope)?;
+                // The rows a combination may use are the model's own and the
+                // cuts already visible where this one is derived. A cut from a
+                // sibling subtree is not among them.
+                let recomputed = gomory(&view, combination, *isolated)?;
+                compare(
+                    &recomputed,
+                    stated_coefficients,
+                    Some(stated_right),
+                    Code::CUT_GMI_COEFFICIENT,
+                )?;
+                let id = axioms.introduce(Inequality {
+                    terms: recomputed.coefficients.clone(),
+                    right: recomputed.right.clone(),
+                });
+                cuts.push(PooledCut {
+                    id,
+                    scope: *scope,
+                    terms: recomputed.coefficients,
+                    right: recomputed.right,
+                });
+            }
+            Step::CoverCut {
+                scope,
+                source,
+                cover: members,
+                lift_order,
+                stated_coefficients,
+            } => {
+                let view = at_node(&nodes, model, &cuts, *scope)?;
+                let recomputed = cover(model, &view, *source, members, lift_order)?;
+                compare(
+                    &recomputed,
+                    stated_coefficients,
+                    None,
+                    Code::CUT_LIFT_COEFFICIENT,
+                )?;
+                let id = axioms.introduce(Inequality {
+                    terms: recomputed.coefficients.clone(),
+                    right: recomputed.right.clone(),
+                });
+                cuts.push(PooledCut {
+                    id,
+                    scope: *scope,
+                    terms: recomputed.coefficients,
+                    right: recomputed.right,
+                });
+            }
             Step::DualBound { node, terms } => {
-                let visible = visibility(&nodes, base, *node)?;
+                let visible = visibility(&nodes, base, &cuts, *node)?;
                 let bound = dual_bound(work, axioms, terms, &|cited| visible(cited))?;
                 inferences[position] = Some((*node, bound.value));
             }
             Step::Contradiction { node, terms } => {
-                let visible = visibility(&nodes, base, *node)?;
+                let visible = visibility(&nodes, base, &cuts, *node)?;
                 contradiction(work, axioms, terms, &|cited| visible(cited))?;
                 contradictions[position] = Some(*node);
             }
@@ -265,7 +344,11 @@ fn branch(
         right: split.plus(&Frac::one()),
     });
 
-    for (child, assumption) in [(left, left_id), (right, right_id)] {
+    let narrowings = [
+        (left, left_id, (column, true, split.clone())),
+        (right, right_id, (column, false, split.plus(&Frac::one()))),
+    ];
+    for (child, assumption, narrowing) in narrowings {
         let slot = usize::try_from(child).map_err(|_| {
             Rejected::new(
                 Code::TREE_CHILD_EXISTS,
@@ -288,6 +371,7 @@ fn branch(
             parent: Some(parent),
             depth,
             assumption: Some(assumption),
+            narrowing: Some(narrowing),
             branched: false,
             terminal: None,
         });
@@ -305,8 +389,9 @@ fn branch(
 fn visibility(
     nodes: &[NodeState],
     base: u64,
+    cuts: &[PooledCut],
     node: u64,
-) -> Result<impl Fn(u64) -> bool + '_, Rejected> {
+) -> Result<impl Fn(u64) -> bool + 'static, Rejected> {
     let slot = usize::try_from(node).ok().filter(|at| *at < nodes.len());
     let Some(mut at) = slot else {
         return Err(Rejected::new(
@@ -316,8 +401,10 @@ fn visibility(
     };
 
     let mut assumptions: Vec<u64> = Vec::new();
+    let mut lineage: Vec<u64> = Vec::new();
     loop {
         let state = &nodes[at];
+        lineage.push(at as u64);
         if let Some(id) = state.assumption {
             assumptions.push(id);
         }
@@ -332,7 +419,115 @@ fn visibility(
     }
     assumptions.sort_unstable();
 
-    Ok(move |cited: u64| cited < base || assumptions.binary_search(&cited).is_ok())
+    // A cut is visible where it was derived and below, and nowhere else. That
+    // is the rule a sibling citation breaks, and it is enforced here and again
+    // by the solver: a cut escaping its subtree would invalidate every
+    // descendant proof that used the pool entry.
+    let mut visible_cuts: Vec<u64> = cuts
+        .iter()
+        .filter(|cut| lineage.contains(&cut.scope))
+        .map(|cut| cut.id)
+        .collect();
+    visible_cuts.sort_unstable();
+
+    Ok(move |cited: u64| {
+        cited < base
+            || assumptions.binary_search(&cited).is_ok()
+            || visible_cuts.binary_search(&cited).is_ok()
+    })
+}
+
+/// The bounds in force at a node: the model's, narrowed by the assumptions on
+/// the path from the root.
+///
+/// A cut derived at a node is a statement about that node's region, so the
+/// displacements it is built from are measured from that region's bounds.
+fn at_node(
+    nodes: &[NodeState],
+    model: &Instance,
+    cuts: &[PooledCut],
+    node: u64,
+) -> Result<View, Rejected> {
+    let mut view = View::of(model);
+    let Some(mut at) = usize::try_from(node).ok().filter(|at| *at < nodes.len()) else {
+        return Err(Rejected::new(
+            Code::SCOPE_BAD_SCOPE_NODE,
+            format!("a cut names node {node}, which does not exist"),
+        ));
+    };
+    loop {
+        let state = &nodes[at];
+        if let Some((column, at_most, value)) = &state.narrowing {
+            if *at_most {
+                view.narrow(*column, None, Some(value));
+            } else {
+                view.narrow(*column, Some(value), None);
+            }
+        }
+        match state.parent {
+            None => break,
+            Some(parent) => {
+                at = usize::try_from(parent).map_err(|_| {
+                    Rejected::new(Code::TREE_UNREACHABLE, "a parent identifier is not a node")
+                })?;
+            }
+        }
+    }
+
+    // The cuts already visible here become rows of the relaxation, in the
+    // order the stream introduced them, so a later combination that names one
+    // means the same row on both sides.
+    let mut lineage = Vec::new();
+    let mut at = usize::try_from(node).unwrap_or(usize::MAX);
+    while at < nodes.len() {
+        lineage.push(at as u64);
+        match nodes[at].parent {
+            None => break,
+            Some(parent) => at = usize::try_from(parent).unwrap_or(usize::MAX),
+        }
+    }
+    for cut in cuts {
+        if lineage.contains(&cut.scope) {
+            view.add_cut(cut.terms.clone(), cut.right.clone());
+        }
+    }
+    Ok(view)
+}
+
+/// Compares a recomputed cut against the one a record states.
+///
+/// The recomputation decides. The serialized coefficients are compared so that
+/// a certificate whose separation routine and whose record disagree is caught,
+/// and they are never read as an input to the check.
+fn compare(
+    recomputed: &crate::vcut::Recomputed,
+    stated: &[(u64, Frac)],
+    right: Option<&Frac>,
+    code: Code,
+) -> Result<(), Rejected> {
+    let ours: Vec<(u64, Frac)> = recomputed
+        .coefficients
+        .iter()
+        .map(|(column, value)| (u64::from(*column), value.clone()))
+        .collect();
+    if ours != stated {
+        return Err(Rejected::new(
+            code,
+            "the recomputed cut differs from the one the record states",
+        ));
+    }
+    if let Some(stated) = right {
+        if *stated != recomputed.right {
+            return Err(Rejected::new(
+                code,
+                format!(
+                    "the recomputed right-hand side is {} and the record states {stated}",
+                    recomputed.right
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The bound a leaf cites, checked to be an inference at the leaf's own node.

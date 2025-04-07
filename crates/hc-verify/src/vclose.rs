@@ -762,21 +762,8 @@ fn direct_only(proof: &Proof, code: Code) -> Result<(), Rejected> {
     Ok(())
 }
 
-/// Requires a root whose stated hash is the model this crate recomputed, and
-/// no transform records, which this implementation does not yet replay.
+/// Requires a root whose stated hash is the model the verifier recomputed.
 fn rooted(proof: &Proof, hash: &[u8; 32]) -> Result<(), Rejected> {
-    for step in &proof.steps {
-        if matches!(step, Step::GmiCut { .. } | Step::CoverCut { .. }) {
-            return Err(Rejected::new(
-                Code::CLAIM_NOT_CLOSED,
-                format!(
-                    "the certificate carries a record of type {}, which this implementation does not close",
-                    step.code()
-                ),
-            ));
-        }
-    }
-
     // The root sits after whatever transform records precede it. Its position
     // is not fixed; that a transform may not follow it is, and the chain
     // replay enforces that separately.

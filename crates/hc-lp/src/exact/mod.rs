@@ -22,6 +22,6 @@ pub mod canonical;
 pub mod rebuild;
 pub mod system;
 
-pub use canonical::Canonical;
+pub use canonical::{Canonical, ExactRow};
 pub use rebuild::{Gap, Wanted, exact_multipliers, exact_point, resting_value, tableau_row};
 pub use system::{Failure, System};

@@ -29,6 +29,7 @@
 pub mod vaxiom;
 pub mod vcli;
 pub mod vclose;
+pub mod vcut;
 pub mod vhash;
 pub mod vhcc;
 pub mod vint;
