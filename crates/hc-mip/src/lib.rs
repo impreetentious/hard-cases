@@ -24,10 +24,12 @@
 //! fails is left open and named, and a tree with an open node proves a gap
 //! rather than optimality. There is no status meaning "probably fine".
 
+pub mod branching;
 pub mod incumbent;
 pub mod search;
 pub mod tree;
 
+pub use branching::{Branching, Pseudocosts};
 pub use incumbent::{Incumbent, screen};
 pub use search::{Ending, Node, Options, Search, run};
 pub use tree::{Assumption, Tree};

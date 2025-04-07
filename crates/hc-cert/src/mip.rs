@@ -140,6 +140,54 @@ fn build(
     let mut assumption_ids: Vec<Option<u64>> = vec![None; search.tree.len()];
     let mut next_id = base;
 
+    // Two passes, and the reason is the identifier rule. A branch allocates
+    // the two identifiers its children's assumptions take, and the verifier
+    // allocates them in record order — so the branches have to appear in the
+    // order the children were *created*, which is not the order the nodes were
+    // *visited* once the search stopped taking them lowest-first.
+    //
+    // Pass one writes every branch, ordered by the child it created. Pass two
+    // writes each closed node's inference and its leaf. Both respect parent
+    // before child and both keep every citation backwards, which is what the
+    // format requires; the grouping is one legal interleaving of many.
+    let mut splits: Vec<(u64, u64)> = Vec::new();
+    for entry in search.tree.entries() {
+        let slot = usize::try_from(entry.id).expect("a node identifier fits");
+        let Some(node) = search.nodes.get(slot).and_then(Option::as_ref) else {
+            return Err(NoProof::NothingToCertify);
+        };
+        if let Node::Split { left, .. } = node {
+            splits.push((*left, entry.id));
+        }
+    }
+    splits.sort_unstable();
+
+    for (_, id) in &splits {
+        let slot = usize::try_from(*id).expect("a node identifier fits");
+        let Some(Node::Split {
+            column,
+            at,
+            left,
+            right,
+        }) = search.nodes.get(slot).and_then(Option::as_ref)
+        else {
+            return Err(NoProof::NothingToCertify);
+        };
+        let variable = u64::try_from(*column).expect("a column index fits");
+        records.push(Record::Branch {
+            parent: *id,
+            variable,
+            split: at.clone(),
+            left: *left,
+            right: *right,
+        });
+        // Left first, then right, which is the order the record names them and
+        // the order the verifier allocates them in.
+        assumption_ids[usize::try_from(*left).expect("fits")] = Some(next_id);
+        assumption_ids[usize::try_from(*right).expect("fits")] = Some(next_id + 1);
+        next_id += 2;
+    }
+
     for entry in search.tree.entries() {
         let id = entry.id;
         let slot = usize::try_from(id).expect("a node identifier fits");
@@ -148,26 +196,7 @@ fn build(
         };
 
         match node {
-            Node::Split {
-                column,
-                at,
-                left,
-                right,
-            } => {
-                let variable = u64::try_from(*column).expect("a column index fits");
-                records.push(Record::Branch {
-                    parent: id,
-                    variable,
-                    split: at.clone(),
-                    left: *left,
-                    right: *right,
-                });
-                // Left first, then right, which is the order the record names
-                // them and the order the verifier allocates them in.
-                assumption_ids[usize::try_from(*left).expect("fits")] = Some(next_id);
-                assumption_ids[usize::try_from(*right).expect("fits")] = Some(next_id + 1);
-                next_id += 2;
-            }
+            Node::Split { .. } => {}
             Node::Infeasible { basis } => {
                 let canonical = at_node(&root, &search.tree, id);
                 let bounds = node_bounds(model, &axioms, &search.tree, &assumption_ids, id);
@@ -220,6 +249,15 @@ fn build(
                 return Err(NoProof::Unproved {
                     node: id,
                     reason: reason.clone(),
+                });
+            }
+            Node::Suspect { value, parent } => {
+                // A bound that came out below its parent's is not something to
+                // write down more carefully; it is two numbers this side
+                // computed that cannot both be right.
+                return Err(NoProof::Unproved {
+                    node: id,
+                    reason: format!("its bound {value} is below its parent's {parent}"),
                 });
             }
         }

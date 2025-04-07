@@ -88,6 +88,12 @@ How raw instance bytes become the exact model a proof is about, and how two pars
 - **uniqueness** — Duplicate row names or duplicate column names are rejected. Ambiguity in what a later record refers to is not something to resolve by a rule; it is a broken file.
 - **limits** — A name is at most the byte length given in numeric.toml and may not contain a line feed.
 
+## `[derived]`
+
+- **scope** — A model produced by a transform rather than by a parser is dumped by the same rules, with two exceptions that follow from what the lines mean.
+- **notes** — The zero-sum and discarded lines describe how a file was read. A derived model was computed rather than read, so its dump carries neither.
+- **binding** — The format tag, the original sense, and the instance digest are carried through unchanged. They describe what the model is about, and a reduction of a file is still about that file.
+
 ## `[inequalities]`
 
 - **form** — Every canonical inequality is written a dot x >= b.

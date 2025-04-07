@@ -33,16 +33,46 @@ use hc_lp::dual::solve_from as solve_dual;
 use hc_lp::exact::{Canonical, exact_multipliers, exact_point, resting_value};
 use hc_lp::{Basis, Options as LpOptions, Outcome as LpOutcome, Problem, Working, solve};
 
-use crate::incumbent::{Incumbent, most_fractional, screen};
+use crate::branching::{
+    Branching, Candidate, Pseudocosts, by_pseudocost, candidates, most_fractional,
+};
+use crate::incumbent::{Incumbent, screen};
 use crate::tree::Tree;
 
 /// How much searching to do.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Options {
     /// The largest number of nodes to open.
     pub node_limit: u64,
     /// The deepest a node may be.
     pub depth_limit: u32,
+    /// How deep a dive may go before the search returns to best-first.
+    ///
+    /// Plunging finds incumbents early, and an incumbent is what makes every
+    /// later bound able to close a node. Diving forever would be depth-first
+    /// search wearing a different name, so the dive is capped and the search
+    /// returns to the open node with the most promising bound.
+    pub plunge_depth: u32,
+    /// How many node bases to keep for warm starts.
+    ///
+    /// A basis is large and a tree is not. Keeping every one would make memory
+    /// grow with the search rather than with the model, so the oldest are
+    /// dropped and the nodes that lose theirs are solved from cold — which is
+    /// slower and reaches the same answers, as the warm-start trap requires.
+    pub basis_cache: usize,
+    /// A candidate solution to start from.
+    ///
+    /// It goes through the same exact screening every other candidate does.
+    /// A supplied point that is not genuinely feasible is refused rather than
+    /// rounded into place, because the incumbent is what every prune is
+    /// measured against and a wrong one discards the answer.
+    pub start: Option<Vec<Rational>>,
+    /// Which rule chooses the branching variable.
+    ///
+    /// It changes the shape of the tree and nothing about what the tree
+    /// proves, which is why both rules exist and why a campaign runs the
+    /// search under each and requires the same answers.
+    pub branching: Branching,
     /// Whether a child starts from its parent's basis.
     ///
     /// A branch changes one bound and nothing else, so the parent's optimal
@@ -58,6 +88,10 @@ impl Default for Options {
         Self {
             node_limit: 100_000,
             depth_limit: 64,
+            plunge_depth: 32,
+            basis_cache: 256,
+            start: None,
+            branching: Branching::ReliabilityPseudocost,
             warm_start: true,
         }
     }
@@ -104,6 +138,18 @@ pub enum Node {
         left: u64,
         /// The child taking the at-least side.
         right: u64,
+    },
+    /// A node whose bound came out below its parent's.
+    ///
+    /// A child's region is a subset of its parent's, so its bound cannot be
+    /// weaker. When it is, the arithmetic is describing something other than
+    /// the problem, and the node is kept open rather than closed on numbers
+    /// that have stopped meaning anything.
+    Suspect {
+        /// The bound the node produced.
+        value: Rational,
+        /// The bound its parent had.
+        parent: Rational,
     },
     /// The node could not be closed and could not be given a bound.
     ///
@@ -173,7 +219,7 @@ impl Search {
         let mut best: Option<Rational> = None;
         for node in self.nodes.iter().flatten() {
             match node {
-                Node::Unproved { .. } => return None,
+                Node::Unproved { .. } | Node::Suspect { .. } => return None,
                 Node::Frontier { value, .. } => {
                     best = Some(match best {
                         None => value.clone(),
@@ -194,26 +240,40 @@ impl Search {
 /// Runs the search.
 #[must_use]
 pub fn run(model: &Model, options: &Options) -> Search {
+    let root_exact = Canonical::of(model);
+    // A supplied solution is screened before the search begins, so the first
+    // node already has something to prune against — and so that a point which
+    // is not genuinely feasible is refused here rather than believed.
+    let incumbent = options
+        .start
+        .as_ref()
+        .and_then(|point| screen(&root_exact, point).ok());
+
     let mut walk = Walk {
         working: Working::from_model(model),
-        root_exact: Canonical::of(model),
+        root_exact,
         tree: Tree::new(),
         bases: vec![None],
+        cached: Vec::new(),
+        bounds: vec![None],
+        costs: Pseudocosts::new(root_exact_columns(model)),
         nodes: vec![None],
-        incumbent: None,
+        incumbent,
         open: vec![0],
+        diving: None,
+        bounding: false,
         opened: 0,
         iterations: 0,
         unbounded: false,
     };
 
-    while let Some(id) = walk.open.iter().min().copied() {
+    while let Some(id) = walk.pick() {
         walk.open.retain(|other| *other != id);
         if walk.opened >= options.node_limit {
-            // Whatever is left open stays open and keeps whatever bound it was
-            // given. Nothing is closed on the way out.
-            walk.open.push(id);
-            break;
+            // The budget is spent. What remains is bounded rather than split,
+            // so every node the search leaves open leaves with an exact bound
+            // and the result is a certified gap rather than no progress.
+            walk.bounding = true;
         }
         walk.opened += 1;
         let result = walk.visit(id, options);
@@ -234,15 +294,112 @@ struct Walk {
     tree: Tree,
     /// The basis each node finished on, for its children to start from.
     bases: Vec<Option<Basis>>,
+    /// The order bases were filed in, oldest first, for eviction.
+    cached: Vec<u64>,
+    /// The exact bound each node established, for its children to beat.
+    bounds: Vec<Option<Rational>>,
+    /// What splitting each column has cost, so far.
+    costs: Pseudocosts,
     nodes: Vec<Option<Node>>,
     incumbent: Option<Incumbent>,
     open: Vec<u64>,
+    /// The node a dive is currently following, when one is.
+    diving: Option<u64>,
+    /// Whether the search has stopped splitting and is only bounding.
+    ///
+    /// When the node budget runs out, the nodes still queued are each given a
+    /// bound rather than abandoned. An open node with an exact bound is a
+    /// frontier and a certified gap can be built from it; an open node with no
+    /// bound is a hole, and a tree with a hole proves nothing.
+    bounding: bool,
     opened: u64,
     iterations: u64,
     unbounded: bool,
 }
 
 impl Walk {
+    /// The next node to open.
+    ///
+    /// A dive in progress takes its own child, which is what plunging means:
+    /// follow one branch down until it closes, because a leaf reached quickly
+    /// is an incumbent, and an incumbent is what lets every other bound close
+    /// something. When the dive ends, the search returns to the open node
+    /// whose parent bound is most promising, with the lowest identifier
+    /// breaking ties.
+    fn pick(&mut self) -> Option<u64> {
+        if let Some(diving) = self.diving {
+            if self.open.contains(&diving) {
+                return Some(diving);
+            }
+        }
+        self.diving = None;
+
+        let mut best: Option<(u64, Option<Rational>)> = None;
+        for id in &self.open {
+            let bound = self
+                .bounds
+                .get(usize::try_from(*id).ok()?)
+                .cloned()
+                .flatten();
+            let better = match (&best, &bound) {
+                (None, _) => true,
+                // A node with no bound yet is as promising as anything can be:
+                // nothing has established it cannot hold the answer.
+                (Some((_, None)), _) => false,
+                (Some((_, Some(_))), None) => true,
+                (Some((_, Some(seen))), Some(value)) => value.cmp_value(seen).is_lt(),
+            };
+            if better {
+                best = Some((*id, bound));
+            }
+        }
+        best.map(|(id, _)| id)
+    }
+
+    /// Chooses the branching variable, measuring where the estimates are thin.
+    ///
+    /// Strong branching is trial solves: fix the variable's two sides in turn
+    /// and see how far each pushes the relaxation. Those are ordinary
+    /// relaxations solved at a small iteration cap, and nothing they produce
+    /// reaches a conclusion — they order candidates and stop.
+    fn branch_on(
+        &mut self,
+        canonical: &Canonical,
+        list: &[Candidate],
+        options: &Options,
+    ) -> Option<Candidate> {
+        if list.is_empty() {
+            return None;
+        }
+        match options.branching {
+            Branching::MostFractional => most_fractional(list).cloned(),
+            Branching::ReliabilityPseudocost => {
+                let working = self.working.clone();
+                let parent = canonical;
+                let mut costs = core::mem::take(&mut self.costs);
+                let picked = by_pseudocost(list, &mut costs, &mut |candidate| {
+                    trial(&working, parent, candidate)
+                });
+                self.costs = costs;
+                picked
+            }
+        }
+    }
+
+    /// Files a basis, dropping the oldest when the cache is full.
+    fn cache(&mut self, id: u64, basis: Option<Basis>, limit: usize) {
+        self.remember(id, basis);
+        self.cached.retain(|other| *other != id);
+        self.cached.push(id);
+        while self.cached.len() > limit.max(1) {
+            let oldest = self.cached.remove(0);
+            let slot = usize::try_from(oldest).expect("a node identifier fits");
+            if let Some(entry) = self.bases.get_mut(slot) {
+                *entry = None;
+            }
+        }
+    }
+
     /// Solves one node's relaxation and decides what it means.
     fn visit(&mut self, id: u64, options: &Options) -> Node {
         let entry = self.tree.get(id).expect("an open node exists");
@@ -277,7 +434,7 @@ impl Walk {
             | LpOutcome::EffortLimit { basis, .. }
             | LpOutcome::Numerical { basis, .. } => Some(basis.clone()),
         };
-        self.remember(id, finished);
+        self.cache(id, finished, options.basis_cache);
 
         // The exact view of the same subproblem, narrowed from the same path,
         // so the search and the rebuild are looking at one region.
@@ -291,7 +448,41 @@ impl Walk {
                 self.unbounded = true;
                 unproved(&"the relaxation is unbounded")
             }
-            LpOutcome::Optimal { basis, .. } => self.close(&canonical, basis, id, depth, options),
+            LpOutcome::Optimal { basis, .. } => {
+                let result = self.close(&canonical, basis, id, depth, options);
+                // A child's region is inside its parent's, so its bound cannot
+                // be weaker. A bound that regressed is reported and the node
+                // stays open; it is never used to close anything.
+                if let Some(value) = bound_of(&result) {
+                    if let Some(parent) = parent {
+                        if let Some(Some(before)) = self
+                            .bounds
+                            .get(usize::try_from(parent).unwrap_or(usize::MAX))
+                        {
+                            if value.cmp_value(before).is_lt() {
+                                return Node::Suspect {
+                                    value: value.clone(),
+                                    parent: before.clone(),
+                                };
+                            }
+                        }
+                    }
+                }
+                let slot = usize::try_from(id).expect("a node identifier fits");
+                while self.bounds.len() <= slot.max(self.tree.len().saturating_sub(1)) {
+                    self.bounds.push(None);
+                }
+                self.bounds[slot] = bound_of(&result).cloned();
+                // A split starts or continues a dive down its left child.
+                if let Node::Split { left, .. } = &result {
+                    self.diving = if depth + 1 < options.plunge_depth {
+                        Some(*left)
+                    } else {
+                        None
+                    };
+                }
+                result
+            }
             _ => unproved(&"the relaxation reached no conclusion"),
         }
     }
@@ -334,7 +525,8 @@ impl Walk {
             }
         }
 
-        match most_fractional(canonical, &point) {
+        let list = candidates(canonical, &point);
+        match self.branch_on(canonical, &list, options) {
             None => match screen(canonical, &point) {
                 Ok(found) => {
                     let better = self
@@ -352,13 +544,14 @@ impl Walk {
                 }
                 Err(reason) => unproved(&reason),
             },
-            Some((column, at)) => {
-                if depth >= options.depth_limit {
+            Some(candidate) => {
+                if self.bounding || depth >= options.depth_limit {
                     return Node::Frontier {
                         basis: basis.clone(),
                         value,
                     };
                 }
+                let (column, at) = (candidate.column, candidate.at);
                 let (left, right) = self.tree.split(id, column, &at);
                 self.open.push(left);
                 self.open.push(right);
@@ -409,7 +602,7 @@ impl Walk {
             .nodes
             .iter()
             .flatten()
-            .any(|node| matches!(node, Node::Unproved { .. }));
+            .any(|node| matches!(node, Node::Unproved { .. } | Node::Suspect { .. }));
         let has_frontier = self
             .nodes
             .iter()
@@ -437,6 +630,71 @@ impl Walk {
             iterations: self.iterations,
         }
     }
+}
+
+/// The exact bound a node result carries, when it carries one.
+fn bound_of(node: &Node) -> Option<&Rational> {
+    match node {
+        Node::Bound { value, .. } | Node::Frontier { value, .. } | Node::Integral { value, .. } => {
+            Some(value)
+        }
+        _ => None,
+    }
+}
+
+/// How much each side of a candidate would degrade the relaxation.
+///
+/// Two capped solves. A side that fails to solve within the cap contributes
+/// nothing rather than a guess, because an estimate invented where a
+/// measurement failed is worse than no estimate.
+fn trial(working: &Working, parent: &Canonical, candidate: &Candidate) -> Option<(f64, f64)> {
+    let base = Problem::scaled(working, Tol::solver());
+    let (before, _) = solve(
+        &base,
+        &LpOptions {
+            iteration_limit: crate::branching::STRONG_ITERATIONS,
+            ..LpOptions::default()
+        },
+    );
+    let LpOutcome::Optimal { objective, .. } = before else {
+        return None;
+    };
+
+    let floor = crate::branching::to_f64(&candidate.at);
+    let side = |low: f64, high: f64| -> Option<f64> {
+        let narrowed = working.narrowed(&[(candidate.column, low, high)]);
+        let problem = Problem::scaled(&narrowed, Tol::solver());
+        let (outcome, _) = solve(
+            &problem,
+            &LpOptions {
+                iteration_limit: crate::branching::STRONG_ITERATIONS,
+                ..LpOptions::default()
+            },
+        );
+        match outcome {
+            LpOutcome::Optimal {
+                objective: after, ..
+            } => Some((after - objective).max(0.0)),
+            // An infeasible side is the most informative outcome there is, and
+            // it has no finite degradation. It is reported as a large one
+            // rather than as nothing, because the variable is worth splitting.
+            LpOutcome::Infeasible { .. } => Some(objective.abs() + 1.0),
+            _ => None,
+        }
+    };
+
+    // The node's exact view is not consulted: a trial solve is a floating
+    // estimate and is allowed to be one, because nothing it produces reaches a
+    // conclusion.
+    let _ = parent;
+    let down = side(f64::NEG_INFINITY, floor)?;
+    let up = side(floor + 1.0, f64::INFINITY)?;
+    Some((down, up))
+}
+
+/// How many columns the working shape has, for sizing the estimates.
+fn root_exact_columns(model: &Model) -> usize {
+    model.variables().len() + model.rows().len()
 }
 
 fn unproved(reason: &dyn core::fmt::Display) -> Node {

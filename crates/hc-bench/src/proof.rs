@@ -151,7 +151,7 @@ fn compatible(certified: &str, reference: &str) -> bool {
 }
 
 /// The word a claim travels as in the report.
-fn claim_word(claim: hc_verify::vhcc::Claim) -> &'static str {
+pub fn claim_word(claim: hc_verify::vhcc::Claim) -> &'static str {
     use hc_verify::vhcc::Claim;
     match claim {
         Claim::Optimal => "optimal",

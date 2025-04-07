@@ -272,13 +272,22 @@ impl Ord for Rational {
 
 impl fmt::Display for Rational {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.to_canonical_string())
+        if self.is_integer() {
+            formatter.write_str(&self.numerator().to_dec_string())
+        } else {
+            write!(
+                formatter,
+                "{}/{}",
+                self.numerator().to_dec_string(),
+                self.denominator().to_dec_string()
+            )
+        }
     }
 }
 
 impl fmt::Debug for Rational {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "Rational({})", self.to_canonical_string())
+        write!(formatter, "Rational({self})")
     }
 }
 
