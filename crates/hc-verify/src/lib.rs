@@ -34,6 +34,7 @@ pub mod vhcc;
 pub mod vint;
 pub mod vmodel;
 pub mod vparse;
+pub mod vpresolve;
 pub mod vrat;
 pub mod vreject;
 pub mod vrules;
@@ -50,6 +51,7 @@ pub use vhcc::{Claim, Proof, Step, from_annotated_hex};
 pub use vint::{Int, IntError, Nat, NatError};
 pub use vmodel::{Axiom, Cell, Column, Constraint, Direction, Face, Instance, Tag};
 pub use vparse::Layout;
+pub use vpresolve::Reduction;
 pub use vrat::Frac;
 pub use vreject::{Code, Rejected};
 pub use vrules::{

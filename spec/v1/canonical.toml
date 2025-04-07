@@ -105,6 +105,11 @@ limits = 'A name is at most the byte length given in numeric.toml and may not co
 # for variable bounds, which is what makes a contradiction record a complete
 # Farkas witness with nothing omitted by custom.
 
+[derived]
+scope = 'A model produced by a transform rather than by a parser is dumped by the same rules, with two exceptions that follow from what the lines mean.'
+notes = 'The zero-sum and discarded lines describe how a file was read. A derived model was computed rather than read, so its dump carries neither.'
+binding = 'The format tag, the original sense, and the instance digest are carried through unchanged. They describe what the model is about, and a reduction of a file is still about that file.'
+
 [inequalities]
 form = 'Every canonical inequality is written a dot x >= b.'
 row_lower = 'A finite row lower bound L contributes a dot x >= L with the row coefficients unchanged.'

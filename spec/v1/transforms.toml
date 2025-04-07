@@ -12,6 +12,19 @@ version = 1
 title = 'Presolve transforms v1'
 summary = 'The eight closed transforms, their applicability conditions, and their forward and reverse maps.'
 
+[encoding]
+identifier = 'The rule identifiers are 1 through 8, in the order T1 to T8.'
+parameters = 'A record carries its parameters as canonical rationals, in the order the transform names them. An index is written as the integer it is.'
+t1 = 'The column index, then the value.'
+t2 = 'The column index, then the chosen value.'
+t3 = 'The row index, then the column index.'
+t4 = 'The row index, then the column index.'
+t5 = 'The row index.'
+t6 = 'The row index, then one for the upper side and zero for the lower.'
+t7 = 'The row index, the column index, one for an upper bound and zero for a lower, then the new bound value.'
+t8 = 'The retained column index, then the dropped one.'
+inertness = 'Every parameter except an index is recomputed. A value a record states is compared against what the transform derives and is otherwise inert, so a record cannot introduce a number the model does not imply.'
+
 [invariant]
 forward = 'Every feasible point of the model before the transform maps forward to a feasible point of the model after it, with objective no greater in the minimization sense.'
 reverse = 'Every feasible point of the model after the transform has a deterministic reverse lift to a feasible point of the model before it, with exactly equal objective.'
