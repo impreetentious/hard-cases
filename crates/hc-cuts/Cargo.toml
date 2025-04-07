@@ -1,0 +1,22 @@
+[package]
+name = "hc-cuts"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+# A cut's validity is an exact statement about the model. The separation
+# routine may search in floating point; the derivation that goes into a
+# certificate is rational throughout, because an invalid cut does not make the
+# solver slow, it makes it confidently wrong.
+hc-exact = { path = "../hc-exact" }
+hc-lp = { path = "../hc-lp" }
+
+[dev-dependencies]
+hc-io = { path = "../hc-io" }
+
+[lints]
+workspace = true

@@ -131,6 +131,36 @@ pub fn resting_value(canonical: &Canonical, basis: &Basis, column: usize) -> Opt
     }
 }
 
+/// One row of the basis-transformed matrix, exactly.
+///
+/// The multipliers `rho` solving `B^T rho = e_r`, which turn the model's row
+/// equations into the equation the basis puts row `r` in. A cut derivation
+/// records them and both implementations reconstruct the equation from them,
+/// so this is the one thing about a basis that reaches a certificate — as
+/// numbers, checked by recomputation, rather than as a claim about a basis.
+///
+/// # Errors
+///
+/// Returns [`Gap::Singular`] when the basis is singular in exact arithmetic.
+pub fn tableau_row(
+    canonical: &Canonical,
+    basis: &Basis,
+    position: usize,
+) -> Result<Vec<Rational>, Gap> {
+    let columns: Vec<Vec<(u32, Rational)>> = basis
+        .basic()
+        .iter()
+        .map(|column| canonical.column(*column).to_vec())
+        .collect();
+    let system = System::from_columns(canonical.rows(), &columns).map_err(Gap::Singular)?;
+    let mut unit = vec![Rational::zero(); canonical.rows()];
+    if position >= unit.len() {
+        return Err(Gap::Singular(Failure::Singular { at: position }));
+    }
+    unit[position] = Rational::one();
+    system.transposed().solve(&unit).map_err(Gap::Singular)
+}
+
 /// The exact row multipliers a basis implies for a cost vector.
 ///
 /// The cost vector is over every column, structural and logical alike, because

@@ -24,7 +24,10 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: ./scripts/ci/forbidden-grep.sh
+      # Both ways. The debug run is where an arithmetic overflow panics rather
+      # than wrapping; the release run is where the campaigns finish.
       - run: cargo test --locked --workspace --all-targets
+      - run: cargo test --locked --workspace --all-targets --release
       # The two front doors, on the real executables. A certificate is checked
       # by the standalone binary with none of the solver linked, and by the
       # wrapper the command line offers, and the two must agree byte for byte.

@@ -23,5 +23,5 @@ pub mod rebuild;
 pub mod system;
 
 pub use canonical::Canonical;
-pub use rebuild::{Gap, Wanted, exact_multipliers, exact_point, resting_value};
+pub use rebuild::{Gap, Wanted, exact_multipliers, exact_point, resting_value, tableau_row};
 pub use system::{Failure, System};

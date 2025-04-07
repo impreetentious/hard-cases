@@ -9,7 +9,13 @@ works to follow.
 - Run `cargo fmt --all -- --check`.
 - Run `cargo clippy --workspace --all-targets -- -D warnings`.
 - Run `./scripts/ci/forbidden-grep.sh` and the verifier isolation check.
-- Run `cargo test --workspace --all-targets` and `./scripts/preflight.sh`.
+- Run `./scripts/preflight.sh`. It is the local mirror of the `check` workflow
+  and runs the same steps in the same order.
+- The suite runs under release inside the preflight, because the campaigns are
+  sized by the normative constants and running them unoptimized costs minutes
+  per change without covering anything more. The unit tests are run unoptimized
+  as well, which is where an arithmetic overflow panics rather than wrapping,
+  and continuous integration runs everything both ways.
 - Add a named regression test for every known failure mode the change touches.
 - Update the public rustdoc for anything you changed.
 

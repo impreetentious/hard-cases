@@ -19,8 +19,17 @@ echo "[4/7] cargo clippy"
 cargo clippy --workspace --all-targets -- -D warnings
 echo "[5/7] forbidden API scan and verifier isolation"
 "$repo_root/scripts/ci/forbidden-grep.sh"
+# The campaigns are the expensive part and they are sized by the normative
+# constants, not by what is comfortable. Running them unoptimized costs minutes
+# per change and buys nothing the optimized run does not, so the suite runs
+# under release here and the debug run — which is where an arithmetic overflow
+# turns into a panic rather than a wrap — is kept for the unit tests, where the
+# arithmetic actually lives. Continuous integration still runs everything both
+# ways; this is the local mirror, and a mirror nobody can bear to look in is
+# not a mirror.
 echo "[6/7] tests"
-cargo test --workspace --all-targets
+cargo test --workspace --all-targets --release
+cargo test --workspace --lib
 echo "[7/7] standalone verifier and wrapper parity"
 "$repo_root/scripts/ci/parity.sh"
 echo "preflight: PASS"
