@@ -18,6 +18,8 @@ pub enum Command {
         no_certificate: bool,
         /// Whether to solve by the dual method where it can start.
         dual: bool,
+        /// Whether to reduce the model before searching.
+        presolve: bool,
     },
     /// Recheck a certificate against an instance.
     Verify {
@@ -48,7 +50,7 @@ pub enum Command {
 /// The usage text.
 pub const USAGE: &str = "\
 usage:
-  hc solve <instance> [--cert <file>] [--no-cert] [--dual]
+  hc solve <instance> [--cert <file>] [--no-cert] [--dual] [--no-presolve]
   hc verify <certificate> --instance <file>
   hc check <instance>
   hc explain <instance>
@@ -102,6 +104,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
     let mut certificate = None;
     let mut no_certificate = false;
     let mut dual = false;
+    let mut presolve = true;
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
@@ -126,6 +129,13 @@ fn solve(arguments: &[String]) -> Option<Command> {
                 dual = true;
                 index += 1;
             }
+            "--no-presolve" => {
+                if !presolve {
+                    return None;
+                }
+                presolve = false;
+                index += 1;
+            }
             other if other.starts_with('-') => return None,
             other if instance.is_none() => {
                 instance = Some(other.to_owned());
@@ -145,6 +155,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
         certificate,
         no_certificate,
         dual,
+        presolve,
     })
 }
 
@@ -192,6 +203,7 @@ mod tests {
                 certificate: None,
                 no_certificate: false,
                 dual: false,
+                presolve: true,
             })
         );
         assert_eq!(
@@ -201,6 +213,7 @@ mod tests {
                 certificate: Some("out.hcc".to_owned()),
                 no_certificate: false,
                 dual: false,
+                presolve: true,
             })
         );
     }
@@ -214,9 +227,33 @@ mod tests {
                 certificate: None,
                 no_certificate: false,
                 dual: true,
+                presolve: true,
             })
         );
         assert_eq!(parse(&words(&["solve", "m.mps", "--dual", "--dual"])), None);
+    }
+
+    #[test]
+    fn presolve_is_on_unless_it_is_turned_off_by_name() {
+        assert_eq!(
+            parse(&words(&["solve", "m.mps", "--no-presolve"])),
+            Some(Command::Solve {
+                instance: "m.mps".to_owned(),
+                certificate: None,
+                no_certificate: false,
+                dual: false,
+                presolve: false,
+            })
+        );
+        assert_eq!(
+            parse(&words(&[
+                "solve",
+                "m.mps",
+                "--no-presolve",
+                "--no-presolve"
+            ])),
+            None
+        );
     }
 
     #[test]

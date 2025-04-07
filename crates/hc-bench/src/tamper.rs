@@ -94,6 +94,36 @@ pub const CASES: &[Case] = &[
         resealed: true,
     },
     Case {
+        name: "unknown_transform_rule",
+        expect: "HCC-TRANSFORM-01",
+        resealed: true,
+    },
+    Case {
+        name: "inapplicable_transform",
+        expect: "HCC-TRANSFORM-02",
+        resealed: true,
+    },
+    Case {
+        name: "edited_transform_value",
+        expect: "HCC-TRANSFORM-02",
+        resealed: true,
+    },
+    Case {
+        name: "forged_stage_hash",
+        expect: "HCC-TRANSFORM-03",
+        resealed: true,
+    },
+    Case {
+        name: "dropped_transform",
+        expect: "HCC-TREE-14",
+        resealed: true,
+    },
+    Case {
+        name: "mismatched_witnesses",
+        expect: "HCC-POINT-05",
+        resealed: true,
+    },
+    Case {
         name: "dropped_leaf",
         expect: "HCC-TREE-06",
         resealed: true,
@@ -353,7 +383,112 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
                 return Err(NotApplicable);
             }
         }
+        "unknown_transform_rule" => {
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::Transform { rule, .. } = record {
+                    if !touched {
+                        *rule = 9;
+                        touched = true;
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "inapplicable_transform" => {
+            // Point a transform at a different row or column. The rule is
+            // real, the model is real, and the condition does not hold there.
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::Transform { parameters, .. } = record {
+                    if !touched {
+                        if let Some(first) = parameters.first_mut() {
+                            *first = first.add(&Rational::from_i64(1));
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "edited_transform_value" => {
+            // Change the value a transform states rather than the indices. The
+            // rule applies; the number it claims to derive is not the number
+            // the model implies.
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::Transform { parameters, .. } = record {
+                    if !touched && parameters.len() >= 2 {
+                        if let Some(last) = parameters.last_mut() {
+                            *last = last.add(&Rational::from_i64(1));
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "forged_stage_hash" => {
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::Transform { result, .. } = record {
+                    if !touched {
+                        result[0] ^= 0xff;
+                        touched = true;
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "dropped_transform" => {
+            // The *last* stage of the chain, so what follows is the root
+            // rather than another transform. A chain shortened in the middle
+            // is caught one stage later by the next hash; shortened at the end
+            // it is caught by the root, which is the case worth pinning
+            // because the root is where the tree's model comes from.
+            let at = records
+                .iter()
+                .rposition(|record| matches!(record, Record::Transform { .. }))
+                .ok_or(NotApplicable)?;
+            excise(records, at);
+        }
+        "mismatched_witnesses" => {
+            // The two coordinate systems pulled apart. Both points may be
+            // feasible in their own models; they no longer correspond.
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::Incumbent { original, .. } = record {
+                    if !touched {
+                        if let Some(pair) = distinct_pair(original) {
+                            original.swap(pair.0, pair.1);
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
         "dropped_leaf" => {
+            // Only meaningful on a tree that actually branched. Removing the
+            // single leaf of a one-node tree leaves a root, a bound and an
+            // integral point, which is a sound linear proof of the same thing
+            // — accepting it is correct, so it is not a forgery.
+            if !records
+                .iter()
+                .any(|record| matches!(record, Record::Branch { .. }))
+            {
+                return Err(NotApplicable);
+            }
             // A node the certificate stops accounting for. The cover is
             // incomplete and the region that leaf covered could hold anything.
             let at = records
@@ -477,6 +612,22 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         .collect();
     certificate.records = Certificate::terminated(without_end);
     Ok(certificate)
+}
+
+/// The first two positions of a vector holding different values.
+///
+/// Swapping equal components changes nothing, and a mutation that changes
+/// nothing produces a genuine certificate and a test that passes for the wrong
+/// reason.
+fn distinct_pair(values: &[Rational]) -> Option<(usize, usize)> {
+    for left in 0..values.len() {
+        for right in (left + 1)..values.len() {
+            if values[left] != values[right] {
+                return Some((left, right));
+            }
+        }
+    }
+    None
 }
 
 /// Removes a record and renumbers every citation that pointed past it.

@@ -66,11 +66,12 @@ fn main() -> ExitCode {
             certificate,
             no_certificate,
             dual,
+            presolve,
         } => {
             let Ok(bytes) = slurp(&instance) else {
                 return code(Ending::Misused);
             };
-            let solved = match run::search(&bytes, dual) {
+            let solved = match run::search(&bytes, dual, presolve) {
                 Ok(solved) => solved,
                 Err(message) => {
                     println!("REFUSED: {message}");

@@ -108,14 +108,54 @@ edit = 'Attach a lower bound to an optimal claim, which carries none.'
 note = 'An optimal claim has its bound equal to its objective and states one number, not two. A second number is either redundant or a lie, and the format does not carry it either way.'
 
 # ===========================================================================
+# The reduction chain
+# ===========================================================================
+
+[case.unknown_transform_rule]
+expect = 'HCC-TRANSFORM-01'
+resealed = true
+edit = 'Change a transform record to name a rule outside the closed list.'
+note = 'The eight transforms are the whole list. A ninth rule is not an extension point; it is a reduction nobody specified, and every claim downstream of it would rest on a step with no definition.'
+
+[case.inapplicable_transform]
+expect = 'HCC-TRANSFORM-02'
+resealed = true
+edit = 'Point a transform at a different row or column.'
+note = 'The rule is real and the model is real, and the condition does not hold where the record now points. Applicability is what makes a reduction an equivalence, so a step performed where its condition fails is a different model wearing the same name.'
+
+[case.edited_transform_value]
+expect = 'HCC-TRANSFORM-02'
+resealed = true
+edit = 'Add one to the value a transform states.'
+note = 'The indices select what the rule is about; every other number is recomputed. This is the mutation that would smuggle a bound the model does not imply into the reduced model, and the verifier never reads the stated value as fact.'
+
+[case.forged_stage_hash]
+expect = 'HCC-TRANSFORM-03'
+resealed = true
+edit = 'Flip a byte of the hash a transform states for its result.'
+note = 'The hash binds the stages together. It never substitutes for the applicability check, and this entry exists so that both are known to fire.'
+
+[case.dropped_transform]
+expect = 'HCC-TREE-14'
+resealed = true
+edit = 'Delete the last transform record.'
+note = 'The chain no longer produces the model the root names, so everything proved about that model is proved about something the certificate does not derive. A chain shortened in the middle is caught one stage later by the next stated hash; shortened at the end it is caught by the root, which is the case pinned here because the root is where the tree gets its model.'
+
+[case.mismatched_witnesses]
+expect = 'HCC-POINT-05'
+resealed = true
+edit = 'Swap two components of the original-space witness.'
+note = 'Both points may be feasible in their own models and they no longer correspond through the chain. A certificate whose two witnesses had come apart would report an objective that belonged to neither.'
+
+# ===========================================================================
 # The recursive cover
 # ===========================================================================
 
 [case.dropped_leaf]
 expect = 'HCC-TREE-06'
 resealed = true
-edit = 'Delete the first leaf record.'
-note = 'A node the certificate stops accounting for. The region that leaf covered is no longer claimed about by anything, and a cover with a hole in it is not a cover. This is the tamper the recursive check exists for.'
+edit = 'Delete the first leaf record of a tree that branched.'
+note = 'A node the certificate stops accounting for. The region that leaf covered is no longer claimed about by anything, and a cover with a hole in it is not a cover. This is the tamper the recursive check exists for. It applies only to a tree that branched: removing the single leaf of a one-node tree leaves a root, a bound, and an integral point attaining it, which is a sound linear proof of the same statement, and accepting that is correct rather than a hole.'
 
 [case.dropped_branch]
 expect = 'HCC-TREE-05'

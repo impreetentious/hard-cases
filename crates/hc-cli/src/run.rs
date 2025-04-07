@@ -13,12 +13,13 @@
 
 use hc_cert::assemble::assemble_lp;
 use hc_cert::explain::tree;
-use hc_cert::mip::assemble_mip;
+use hc_cert::mip::{assemble_mip, assemble_presolved};
 use hc_core::{Model, Tol};
 use hc_io::mps::{Form, read};
 use hc_lp::dual::solve_from as solve_dual;
 use hc_lp::{Basis, Effort, Options, Outcome, Problem, Working, solve};
 use hc_mip::search::{Options as MipOptions, run as search_tree};
+use hc_presolve::{Chain, reduce};
 use hc_verify::vcli::{accepted, refused};
 use hc_verify::vclose::verify;
 
@@ -55,9 +56,13 @@ pub fn check(raw: &[u8]) -> (String, Ending) {
 pub struct Solved {
     /// The parsed model.
     pub model: Model,
-    /// What the search returned.
+    /// The reduction chain, when presolve ran.
+    pub chain: Option<Chain>,
+    /// The tree search over the reduced model.
+    pub tree: hc_mip::search::Search,
+    /// The linear outcome on the original model, for the fallback path.
     pub outcome: Outcome,
-    /// What the search spent.
+    /// What the linear search spent.
     pub effort: Effort,
     /// Which method actually ran.
     ///
@@ -73,8 +78,12 @@ pub struct Solved {
 /// # Errors
 ///
 /// Returns the message to print when the file is not a readable instance.
-pub fn search(raw: &[u8], dual: bool) -> Result<Solved, String> {
+pub fn search(raw: &[u8], dual: bool, presolve: bool) -> Result<Solved, String> {
     let model = parse_instance(raw)?;
+    let chain = presolve.then(|| reduce(&model));
+    let reduced = chain.as_ref().map_or(&model, |chain| &chain.reduced);
+    let tree = search_tree(reduced, &MipOptions::default());
+
     let working = Working::from_model(&model);
     let problem = Problem::scaled(&working, Tol::solver());
 
@@ -96,6 +105,8 @@ pub fn search(raw: &[u8], dual: bool) -> Result<Solved, String> {
     };
     Ok(Solved {
         model,
+        chain,
+        tree,
         outcome,
         effort,
         method,
@@ -138,7 +149,17 @@ pub fn certify(
     certificate_name: &str,
     solved: &Solved,
 ) -> (String, Option<Vec<u8>>, Ending) {
-    let assembled = match assemble_lp(&solved.model, raw, &solved.outcome) {
+    // The tree path first, because it is the general one: a model with no
+    // integer column produces a one-node tree and the same statement. The
+    // linear path is the fallback, and today it is what certifies an
+    // unbounded relaxation, which a mixed-integer claim cannot use.
+    let assembled = match &solved.chain {
+        Some(chain) => assemble_presolved(&solved.model, chain, raw, &solved.tree),
+        None => assemble_mip(&solved.model, raw, &solved.tree),
+    }
+    .or_else(|_| assemble_lp(&solved.model, raw, &solved.outcome));
+
+    let assembled = match assembled {
         Ok(certificate) => certificate,
         Err(reason) => {
             return (
@@ -161,6 +182,25 @@ pub fn certify(
             out.push_str("method       ");
             out.push_str(solved.method);
             out.push('\n');
+            // What the certificate carries, not what presolve did. A run may
+            // reduce a model and then certify by a route that carries no
+            // chain, and reporting the reduction there would describe a proof
+            // the file does not contain.
+            let replayed = assembled
+                .records
+                .iter()
+                .filter(|record| {
+                    matches!(
+                        record,
+                        hc_cert::hcc::Record::Transform { .. }
+                            | hc_cert::hcc::Record::TransformContradiction { .. }
+                    )
+                })
+                .count();
+            let _ = core::fmt::Write::write_fmt(
+                &mut out,
+                format_args!("presolve     {replayed} transform(s) in the certificate\n"),
+            );
             (out, Some(bytes), Ending::Fine)
         }
         Err(refusal) => {
@@ -186,8 +226,9 @@ pub fn explain(instance_name: &str, raw: &[u8]) -> (String, Ending) {
         Ok(model) => model,
         Err(message) => return (format!("REFUSED: {message}\n"), Ending::Refused),
     };
-    let search = search_tree(&model, &MipOptions::default());
-    let assembled = match assemble_mip(&model, raw, &search) {
+    let chain = reduce(&model);
+    let search = search_tree(&chain.reduced, &MipOptions::default());
+    let assembled = match assemble_presolved(&model, &chain, raw, &search) {
         Ok(assembled) => assembled,
         Err(reason) => {
             return (format!("no certificate: {reason}\n"), Ending::Refused);
@@ -253,7 +294,7 @@ mod tests {
 
     #[test]
     fn a_solve_reports_only_what_the_verifier_accepted() {
-        let solved = search(TINY, false).expect("the frozen instance parses");
+        let solved = search(TINY, false, true).expect("the frozen instance parses");
         let (out, bytes, ending) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         assert_eq!(ending, Ending::Fine);
         assert!(bytes.is_some());
@@ -263,7 +304,7 @@ mod tests {
 
     #[test]
     fn refusing_to_certify_produces_a_candidate_that_says_it_is_one() {
-        let solved = search(TINY, false).expect("the frozen instance parses");
+        let solved = search(TINY, false, true).expect("the frozen instance parses");
         let out = candidate(&solved);
         assert!(out.contains("candidate-"));
         assert!(out.contains("(uncertified)"));
@@ -272,7 +313,7 @@ mod tests {
 
     #[test]
     fn the_wrapper_prints_exactly_what_the_library_renders() {
-        let solved = search(TINY, false).expect("the frozen instance parses");
+        let solved = search(TINY, false, true).expect("the frozen instance parses");
         let (_, bytes, _) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         let bytes = bytes.expect("a certificate");
         let (wrapper, ending) = recheck("tiny.hcc", &bytes, "tiny.mps", TINY);
@@ -287,10 +328,10 @@ mod tests {
 
     #[test]
     fn the_dual_method_reports_whether_it_actually_ran() {
-        let plain = search(TINY, false).expect("the frozen instance parses");
+        let plain = search(TINY, false, true).expect("the frozen instance parses");
         assert_eq!(plain.method, "primal");
 
-        let asked = search(TINY, true).expect("the frozen instance parses");
+        let asked = search(TINY, true, true).expect("the frozen instance parses");
         assert!(
             asked.method == "dual" || asked.method == "dual-declined",
             "a run that asked for the dual reported {}",
@@ -319,7 +360,7 @@ mod tests {
 
     #[test]
     fn a_certificate_bound_to_another_instance_is_refused_by_the_wrapper() {
-        let solved = search(TINY, false).expect("the frozen instance parses");
+        let solved = search(TINY, false, true).expect("the frozen instance parses");
         let (_, bytes, _) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         let bytes = bytes.expect("a certificate");
         let mut other = TINY.to_vec();

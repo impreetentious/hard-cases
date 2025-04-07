@@ -17,6 +17,7 @@ hc-core = { path = "../hc-core" }
 hc-io = { path = "../hc-io" }
 hc-lp = { path = "../hc-lp" }
 hc-mip = { path = "../hc-mip" }
+hc-presolve = { path = "../hc-presolve" }
 hc-verify = { path = "../hc-verify" }
 
 # This crate reads files and the command line, which the deterministic

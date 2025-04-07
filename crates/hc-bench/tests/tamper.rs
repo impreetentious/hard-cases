@@ -16,11 +16,12 @@
 
 use hc_bench::tamper::{CASES, forge, instance_for};
 use hc_cert::assemble::assemble_lp;
-use hc_cert::mip::assemble_mip;
+use hc_cert::mip::{assemble_mip, assemble_presolved};
 use hc_core::{SpecDocument, Tol};
 use hc_io::mps::{Form, read};
 use hc_lp::{Options, Problem, Working, solve};
 use hc_mip::search::{Options as MipOptions, run as search_tree};
+use hc_presolve::reduce;
 use hc_verify::vclose::verify;
 
 const MANIFEST: &str = include_str!("../../../tamper/manifest.toml");
@@ -70,6 +71,53 @@ const KNAPSACK: &str = concat!(
 
 const TREES: &[(&str, &str)] = &[("branchy", BRANCHY), ("knapsack", KNAPSACK)];
 
+/// Two instances that genuinely reduce, so the chain mutations have a chain to
+/// work on.
+const REDUCIBLE: &str = concat!(
+    "NAME R\n",
+    "ROWS\n",
+    " N obj\n",
+    " L r0\n",
+    " L r1\n",
+    "COLUMNS\n",
+    " MARKER 'MARKER' 'INTORG'\n",
+    " x obj -4 r0 3\n",
+    " x r1 2\n",
+    " y obj -3 r0 4\n",
+    " y r1 1\n",
+    " z obj -1 r0 0\n",
+    " MARKER 'MARKER' 'INTEND'\n",
+    "RHS\n",
+    " rhs r0 12 r1 6\n",
+    "BOUNDS\n",
+    " UI b x 10\n",
+    " UI b y 10\n",
+    " FX b z 2\n",
+    "ENDATA\n",
+);
+
+const SINGLETON: &str = concat!(
+    "NAME S\n",
+    "ROWS\n",
+    " N obj\n",
+    " L r0\n",
+    " L r1\n",
+    "COLUMNS\n",
+    " MARKER 'MARKER' 'INTORG'\n",
+    " a obj -2 r0 1\n",
+    " a r1 1\n",
+    " b obj -3 r1 2\n",
+    " MARKER 'MARKER' 'INTEND'\n",
+    "RHS\n",
+    " rhs r0 3 r1 9\n",
+    "BOUNDS\n",
+    " UI b a 8\n",
+    " UI b b 8\n",
+    "ENDATA\n",
+);
+
+const CHAINS: &[(&str, &str)] = &[("reducible", REDUCIBLE), ("singleton", SINGLETON)];
+
 const BASE: &[(&str, &[u8])] = &[
     (
         "transport33.mps",
@@ -109,6 +157,17 @@ fn genuine_tree(name: &str, raw: &[u8]) -> Vec<u8> {
     let model = read(raw, Form::Free).unwrap_or_else(|e| panic!("{name} does not parse: {e}"));
     let search = search_tree(&model, &MipOptions::default());
     assemble_mip(&model, raw, &search)
+        .unwrap_or_else(|e| panic!("{name} produced no certificate: {e}"))
+        .encode()
+}
+
+/// Reduces, searches the reduced model, and returns the chained certificate.
+fn genuine_chain(name: &str, raw: &[u8]) -> Vec<u8> {
+    let model = read(raw, Form::Free).unwrap_or_else(|e| panic!("{name} does not parse: {e}"));
+    let chain = reduce(&model);
+    assert!(!chain.steps.is_empty(), "{name} should reduce");
+    let search = search_tree(&chain.reduced, &MipOptions::default());
+    assemble_presolved(&model, &chain, raw, &search)
         .unwrap_or_else(|e| panic!("{name} produced no certificate: {e}"))
         .encode()
 }
@@ -222,6 +281,44 @@ fn every_forgery_is_refused_by_the_rule_the_corpus_names() {
                 Err(refusal) => refusal,
                 Ok(verdict) => panic!(
                     "{instance_name}/{}: a forged tree was accepted as {}",
+                    case.name,
+                    verdict.claim.word()
+                ),
+            };
+            assert_eq!(
+                refusal.code.text(),
+                case.expect,
+                "{instance_name}/{}: refused by the wrong rule — {refusal}",
+                case.name
+            );
+        }
+    }
+
+    for (instance_name, source) in CHAINS {
+        let raw = source.as_bytes();
+        let certificate = genuine_chain(instance_name, raw);
+        let (_, other) = CHAINS
+            .iter()
+            .find(|(name, _)| name != instance_name)
+            .expect("more than one chained instance");
+        let other = other.as_bytes();
+
+        verify(&certificate, raw).unwrap_or_else(|e| {
+            panic!("{instance_name}: the genuine chained certificate was refused: {e}")
+        });
+
+        for case in CASES {
+            let Ok(forged) = forge(case.name, &certificate, raw) else {
+                continue;
+            };
+            if !applied.contains(&case.name) {
+                applied.push(case.name);
+            }
+            let against = instance_for(case.name, raw, other);
+            let refusal = match verify(&forged, against) {
+                Err(refusal) => refusal,
+                Ok(verdict) => panic!(
+                    "{instance_name}/{}: a forged chain was accepted as {}",
                     case.name,
                     verdict.claim.word()
                 ),
