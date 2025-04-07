@@ -83,7 +83,7 @@ check = 'See the inference rules below.'
 [record.gmi_cut]
 code = 32
 name = 'GmiCut'
-payload = 'A node identifier defining the scope, the row combination multipliers over visible inequalities, the isolated integer basic variable, the bound state of each nonbasic displacement, and the resulting cut coefficients and right-hand side.'
+payload = 'A node identifier defining the scope, the row combination multipliers over visible inequalities, the isolated integer basic variable, and the resulting cut coefficients and right-hand side. No bound state is carried: the displacement of each nonbasic is chosen from the model by the fixed rule in cuts.toml.'
 check = 'The verifier reconstructs the tableau equation and recomputes every cut coefficient by the formula in cuts.toml. The stated coefficients are compared, never adopted.'
 
 [record.cover_cut]

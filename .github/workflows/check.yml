@@ -38,4 +38,7 @@ jobs:
       - run: cargo test --release -p hc-bench --test tiny_milp -- --ignored
       # The two simplex methods against each other on generated instances.
       - run: cargo test --release -p hc-bench --test dual_campaign -- --ignored
+      # Every combination of the search's settings, on every instance, against
+      # enumeration and against a verified certificate.
+      - run: cargo test --release -p hc-bench --test tiny_milp the_nightly_sweep -- --ignored
       - run: cargo doc --workspace --no-deps

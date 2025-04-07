@@ -32,10 +32,12 @@ The literal Gomory mixed-integer formula and the exact cover lifting dynamic pro
 
 ## `[gmi.displacements]`
 
-- **rule** — Each nonbasic variable enters as a nonnegative displacement from one of its finite bounds: w = x - l when the variable sits at a finite lower bound, or w = u - x when it sits at a finite upper bound.
+- **rule** — Each nonbasic variable enters as a nonnegative displacement from one of its finite bounds, chosen from the model by a fixed rule: w = x - l when the variable has a finite lower bound, and otherwise w = u - x when it has a finite upper one.
+- **from_the_model** — The choice is a property of the model rather than of any basis. A displacement defined this way is nonnegative at every point of the model, not only at the vertex a search happened to be sitting on, so the resulting inequality is valid without anything being believed about a basis.
 - **integer_endpoints** — A displacement of an integer variable requires an integer endpoint, so that a unit step in w is a unit step in x.
 - **free_nonbasic** — A nonbasic variable at no finite bound rejects. There is no displacement to write and the formula has no meaning without one.
-- **bound_state** — The bound state of every nonbasic is recorded and checked against the model. A cut derived under one bound state and applied under another is a different inequality.
+- **bound_state** — No bound state is recorded and none is read. A cut derived under one displacement and applied under another would be a different inequality, and that cannot arise: there is one displacement per variable per model and both implementations compute it from the model.
+- **cost** — A cut the separation routine derived by measuring a two-bounded variable down from its upper bound cannot be written in this format. It must be derived from the lower bound instead. That costs some cuts and no correctness.
 
 ## `[gmi.fraction]`
 
