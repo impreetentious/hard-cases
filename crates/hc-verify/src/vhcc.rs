@@ -772,6 +772,21 @@ impl Scan<'_> {
         Ok(out)
     }
 
+    /// A counted array of numbers with no ordering rule at all.
+    ///
+    /// A transform contradiction's sources are the rule's index parameters —
+    /// a row and a column, say — and nothing about them is a set. Requiring
+    /// them to ascend would reject `row 0, column 0`, which is an ordinary
+    /// derivation.
+    fn plain(&mut self) -> Result<Vec<u64>, Rejected> {
+        let count = self.varint()?;
+        let mut out = Vec::new();
+        for _ in 0..count {
+            out.push(self.varint()?);
+        }
+        Ok(out)
+    }
+
     /// An array of identifiers whose order is the record's meaning.
     ///
     /// A lift order is a sequence, not a set: it is the order the dynamic
@@ -817,7 +832,7 @@ fn read_payload(scan: &mut Scan<'_>, code: u8) -> Result<Step, Rejected> {
         },
         2 => Step::TransformContradiction {
             rule: scan.varint()?,
-            sources: scan.ids()?,
+            sources: scan.plain()?,
         },
         3 => Step::Root {
             node: scan.varint()?,

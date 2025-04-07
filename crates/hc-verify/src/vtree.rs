@@ -110,8 +110,15 @@ pub fn replay(
         contradictions.push(None);
 
         match step {
-            Step::Root { .. } | Step::Assertion { .. } | Step::Terminator { .. } => {}
-            Step::Incumbent { .. } => {}
+            // The chain was replayed before the tree was reached, and the
+            // incumbent is checked by the closure. Both are skipped here
+            // rather than refused.
+            Step::Root { .. }
+            | Step::Assertion { .. }
+            | Step::Terminator { .. }
+            | Step::Transform { .. }
+            | Step::TransformContradiction { .. }
+            | Step::Incumbent { .. } => {}
             Step::Branch {
                 parent,
                 variable,

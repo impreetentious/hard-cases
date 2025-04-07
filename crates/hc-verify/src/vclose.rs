@@ -122,8 +122,12 @@ pub fn verify(certificate: &[u8], instance: &[u8]) -> Result<Verdict, Rejected> 
 ///
 /// Returns [`Rejected`] naming the earliest rule that refused.
 pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict, Rejected> {
-    let mut axioms = Axioms::of(model);
-    let hash = model_hash(model);
+    // The chain first. Everything after it is about the reduced model, which
+    // this code computes rather than reads.
+    let (stages, chain_ended) = replay_chain(proof, model)?;
+    let reduced = stages.last().expect("the original is present").clone();
+    let mut axioms = Axioms::of(&reduced);
+    let hash = model_hash(&reduced);
 
     // The claim record and the header must agree before either is used. They
     // are two statements of the same thing, and a disagreement means one of
@@ -145,11 +149,55 @@ pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict
         ));
     }
 
+    // A chain that ended in a contradiction proves infeasibility on its own.
+    // No root and no tree may follow it, because they would claim support the
+    // certificate does not have.
+    if chain_ended.is_some() {
+        if kind != Claim::Infeasible {
+            return Err(Rejected::new(
+                Code::CLAIM_KIND_FORBIDDEN,
+                format!("a presolve contradiction cannot close {}", kind.word()),
+            ));
+        }
+        for step in &proof.steps {
+            if matches!(step, Step::Root { .. }) || step.is_structural() {
+                if matches!(
+                    step,
+                    Step::Transform { .. } | Step::TransformContradiction { .. }
+                ) {
+                    continue;
+                }
+                return Err(Rejected::new(
+                    Code::CLAIM_KIND_FORBIDDEN,
+                    format!(
+                        "a presolve contradiction is followed by a record of type {}",
+                        step.code()
+                    ),
+                ));
+            }
+        }
+        forbid(stated_objective.as_ref(), "an objective")?;
+        forbid(stated_lower.as_ref(), "a lower bound")?;
+        forbid(stated_gap.as_ref(), "a gap")?;
+        return Ok(Verdict {
+            claim: kind,
+            objective: None,
+            lower: None,
+            gap: None,
+            model: hash,
+            bytes: proof.bytes,
+            work: work.units(),
+            peak_bits: work.peak_bits(),
+        });
+    }
+
     if has_tree(proof) && matches!(kind, Claim::Optimal | Claim::Infeasible | Claim::Gap) {
         return tree_close(
             work,
             proof,
+            &reduced,
             model,
+            &stages,
             &mut axioms,
             hash,
             kind,
@@ -242,12 +290,18 @@ pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict
                 }
             };
 
-            let (original, stated) = incumbent(proof)?;
-            point_is_feasible(work, &axioms, original)?;
-            let upper = objective_is(work, &axioms, original, stated)?;
-            if let Some(claimed) = &stated_objective {
-                objective_is(work, &axioms, original, claimed)?;
-            }
+            let (reduced_point, original_point, stated) = incumbent(proof)?;
+            let upper = witness(
+                work,
+                &axioms,
+                model,
+                &stages,
+                proof,
+                reduced_point,
+                original_point,
+                stated,
+                stated_objective.clone(),
+            )?;
 
             // A bound above the objective it is supposed to bound is not a
             // weak proof; it is a false one, and it is the shape a sign error
@@ -328,6 +382,72 @@ pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict
     }
 }
 
+/// Replays the transform chain, recomputing every stage.
+///
+/// Returns every model in the chain, the original first and the reduced last,
+/// together with the position of a contradiction record when one ended the
+/// chain. Nothing a record says about the result is read: each stage is
+/// recomputed from the one before, and the hash the record states is compared
+/// against the hash of what this code built.
+fn replay_chain(
+    proof: &Proof,
+    model: &Instance,
+) -> Result<(Vec<Instance>, Option<usize>), Rejected> {
+    let mut stages = vec![model.clone()];
+    let mut contradiction = None;
+    let mut seen_root = false;
+
+    for (position, step) in proof.steps.iter().enumerate() {
+        match step {
+            Step::Root { .. } => seen_root = true,
+            Step::Transform {
+                rule,
+                parameters,
+                stated_hash,
+            } => {
+                if seen_root {
+                    return Err(Rejected::new(
+                        Code::TRANSFORM_AFTER_ROOT,
+                        "a transform record follows the root",
+                    ));
+                }
+                if contradiction.is_some() {
+                    return Err(Rejected::new(
+                        Code::TRANSFORM_AFTER_ROOT,
+                        "a transform record follows a contradiction",
+                    ));
+                }
+                let reduction = crate::vpresolve::read(*rule, parameters)?;
+                let last = stages.last().expect("the original is present");
+                let next = crate::vpresolve::apply(last, &reduction)?;
+                if model_hash(&next) != *stated_hash {
+                    return Err(Rejected::new(
+                        Code::TRANSFORM_HASH,
+                        format!("the record for rule {rule} states a hash it does not produce"),
+                    ));
+                }
+                stages.push(next);
+            }
+            Step::TransformContradiction { rule, sources } => {
+                if contradiction.is_some() {
+                    return Err(Rejected::new(
+                        Code::TRANSFORM_CONTRADICTION,
+                        "the chain ends twice",
+                    ));
+                }
+                // The derivation is recomputed. A record asserting that the
+                // model was found infeasible is not a witness; the rule has to
+                // actually close the domain on the model the verifier holds.
+                let last = stages.last().expect("the original is present");
+                crate::vpresolve::contradicts(last, *rule, sources)?;
+                contradiction = Some(position);
+            }
+            _ => {}
+        }
+    }
+    Ok((stages, contradiction))
+}
+
 /// Whether the stream carries any record that makes it a tree.
 fn has_tree(proof: &Proof) -> bool {
     proof.steps.iter().any(|step| {
@@ -349,10 +469,13 @@ fn has_tree(proof: &Proof) -> bool {
 /// cover with no point proves a bound and claims optimality, and a point with
 /// an incomplete cover proves feasibility and claims nothing more.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 fn tree_close(
     work: &mut Work,
     proof: &Proof,
     model: &Instance,
+    original: &Instance,
+    stages: &[Instance],
     axioms: &mut Axioms<'_>,
     hash: [u8; 32],
     kind: Claim,
@@ -365,14 +488,17 @@ fn tree_close(
     // The incumbent first: every bound in the tree is measured against it, so
     // it has to be established before any of them is read as a closure.
     let upper = match incumbent(proof) {
-        Ok((original, stated)) => {
-            point_is_feasible(work, axioms, original)?;
-            let value = objective_is(work, axioms, original, stated)?;
-            if let Some(claimed) = stated_objective {
-                objective_is(work, axioms, original, claimed)?;
-            }
-            Some(value)
-        }
+        Ok((reduced_point, original_point, stated)) => Some(witness(
+            work,
+            axioms,
+            original,
+            stages,
+            proof,
+            reduced_point,
+            original_point,
+            stated,
+            stated_objective.cloned(),
+        )?),
         Err(missing) => {
             if kind != Claim::Infeasible {
                 return Err(missing);
@@ -485,6 +611,92 @@ fn tree_close(
     }
 }
 
+/// Checks the two witnesses against their own models and against each other.
+///
+/// The original-space point is checked against the original model, directly
+/// from the bytes the verifier parsed. The reduced point is checked against the
+/// reduced model. And the original point, mapped forward through the replayed
+/// chain, must be exactly the reduced point — which is a stronger statement
+/// than lifting the reduced one and hoping, because the certificate committed
+/// to both before either was checked.
+///
+/// Returns the objective, which both must attain.
+#[allow(clippy::too_many_arguments)]
+fn witness(
+    work: &mut Work,
+    axioms: &Axioms<'_>,
+    original: &Instance,
+    stages: &[Instance],
+    proof: &Proof,
+    reduced_point: &[Frac],
+    original_point: &[Frac],
+    stated: &Frac,
+    claimed: Option<Frac>,
+) -> Result<Frac, Rejected> {
+    // The reduced point, against the reduced model, which is what the tree and
+    // the bounds are about.
+    point_is_feasible(work, axioms, reduced_point)?;
+    let value = objective_is(work, axioms, reduced_point, stated)?;
+    if let Some(claimed) = &claimed {
+        objective_is(work, axioms, reduced_point, claimed)?;
+    }
+
+    if stages.len() == 1 {
+        // No chain was replayed, so the two coordinate systems are one and the
+        // two witnesses must be the same vector.
+        if reduced_point != original_point {
+            return Err(Rejected::new(
+                Code::POINT_CORRESPONDENCE,
+                "the two witnesses differ with no transform between them",
+            ));
+        }
+        return Ok(value);
+    }
+
+    // The correspondence first: the original point pushed through the chain
+    // must be the reduced one. It comes before the original point's own
+    // feasibility because an edited witness breaks both, and the useful thing
+    // to say about it is that the two no longer describe the same solution.
+    let mut carried = original_point.to_vec();
+    let mut stage = 0;
+    for step in &proof.steps {
+        let Step::Transform {
+            rule, parameters, ..
+        } = step
+        else {
+            continue;
+        };
+        let reduction = crate::vpresolve::read(*rule, parameters)?;
+        let before = stages.get(stage).ok_or_else(|| {
+            Rejected::new(
+                Code::POINT_CORRESPONDENCE,
+                "the chain is shorter than its records",
+            )
+        })?;
+        carried = crate::vpresolve::forward(before, &reduction, &carried);
+        stage += 1;
+    }
+    if carried != reduced_point {
+        return Err(Rejected::new(
+            Code::POINT_CORRESPONDENCE,
+            "the original witness does not map onto the reduced one",
+        ));
+    }
+
+    // And then the original point on its own terms, against the original
+    // model, parsed from the original bytes.
+    let original_axioms = Axioms::of(original);
+    point_is_feasible(work, &original_axioms, original_point)?;
+    let lifted = objective_is(work, &original_axioms, original_point, stated)?;
+    if lifted != value {
+        return Err(Rejected::new(
+            Code::POINT_CORRESPONDENCE,
+            format!("the two witnesses attain {lifted} and {value}"),
+        ));
+    }
+    Ok(value)
+}
+
 /// Refuses a value a claim is not entitled to state.
 fn forbid(value: Option<&Frac>, what: &str) -> Result<(), Rejected> {
     match value {
@@ -554,13 +766,7 @@ fn direct_only(proof: &Proof, code: Code) -> Result<(), Rejected> {
 /// no transform records, which this implementation does not yet replay.
 fn rooted(proof: &Proof, hash: &[u8; 32]) -> Result<(), Rejected> {
     for step in &proof.steps {
-        if matches!(
-            step,
-            Step::Transform { .. }
-                | Step::TransformContradiction { .. }
-                | Step::GmiCut { .. }
-                | Step::CoverCut { .. }
-        ) {
+        if matches!(step, Step::GmiCut { .. } | Step::CoverCut { .. }) {
             return Err(Rejected::new(
                 Code::CLAIM_NOT_CLOSED,
                 format!(
@@ -571,7 +777,14 @@ fn rooted(proof: &Proof, hash: &[u8; 32]) -> Result<(), Rejected> {
         }
     }
 
-    let Some(Step::Root { node, stated_hash }) = proof.at(0) else {
+    // The root sits after whatever transform records precede it. Its position
+    // is not fixed; that a transform may not follow it is, and the chain
+    // replay enforces that separately.
+    let Some(Step::Root { node, stated_hash }) = proof
+        .steps
+        .iter()
+        .find(|step| matches!(step, Step::Root { .. }))
+    else {
         return Err(Rejected::new(
             Code::CLAIM_WITNESS_MISSING,
             "the certificate has no root record",
@@ -661,7 +874,7 @@ fn single_contradiction(proof: &Proof) -> Result<&[(u64, Frac)], Rejected> {
 }
 
 /// The incumbent's original-space point and the objective it states.
-fn incumbent(proof: &Proof) -> Result<(&[Frac], &Frac), Rejected> {
+fn incumbent(proof: &Proof) -> Result<(&[Frac], &[Frac], &Frac), Rejected> {
     let mut found = None;
     for step in &proof.steps {
         if let Step::Incumbent {
@@ -676,17 +889,7 @@ fn incumbent(proof: &Proof) -> Result<(&[Frac], &Frac), Rejected> {
                     "the certificate carries more than one incumbent",
                 ));
             }
-            // With no transforms replayed the reduced model is the original
-            // one, so the two witnesses must be the same vector. When presolve
-            // arrives this becomes a mapping through the chain; today it is an
-            // equality, and an equality is what it must be.
-            if reduced != original {
-                return Err(Rejected::new(
-                    Code::POINT_CORRESPONDENCE,
-                    "the reduced and original witnesses differ with no transform between them",
-                ));
-            }
-            found = Some((original.as_slice(), stated_objective));
+            found = Some((reduced.as_slice(), original.as_slice(), stated_objective));
         }
     }
     found.ok_or_else(|| {

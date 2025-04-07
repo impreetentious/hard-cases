@@ -376,6 +376,29 @@ impl<'a> Cursor<'a> {
         Ok(out)
     }
 
+    /// A counted array of numbers with no ordering rule.
+    ///
+    /// A transform contradiction's sources are the rule's index parameters,
+    /// and nothing about them is a set: a derivation about row zero and column
+    /// zero names the same number twice, legitimately.
+    fn plain(&mut self) -> Result<Vec<u64>, Refusal> {
+        let count = self.leb128()?;
+        if count > self.remaining() as u64 {
+            return Err(Refusal::new(
+                Rejection::HCC_TRUNCATED,
+                format!(
+                    "{count} elements declared and {} bytes remain",
+                    self.remaining()
+                ),
+            ));
+        }
+        let mut out: Vec<u64> = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            out.push(self.leb128()?);
+        }
+        Ok(out)
+    }
+
     fn ids(&mut self) -> Result<Vec<u64>, Refusal> {
         let count = self.leb128()?;
         if count > self.remaining() as u64 {
@@ -432,7 +455,7 @@ fn read_record(code: u8, cursor: &mut Cursor<'_>) -> Result<Record, Refusal> {
         }),
         2 => Ok(Record::TransformContradiction {
             rule: cursor.leb128()?,
-            sources: cursor.ids()?,
+            sources: cursor.plain()?,
         }),
         3 => Ok(Record::Root {
             node: cursor.leb128()?,

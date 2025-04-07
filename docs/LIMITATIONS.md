@@ -58,10 +58,15 @@ and be reachable from the root, every node must be either branched or terminated
 exactly once, every leaf must cite an inference made at its own node, and every
 branch must split a declared integer variable at an exact integer.
 
+Certificates whose proof begins with a presolve reduction: every stage is
+recomputed from the original bytes by a second implementation of the eight
+transforms, the hash each record states is compared against what that
+recomputation produces, and the original-space witness is checked against the
+original model and then mapped forward through the chain onto the reduced one.
+
 ## What the verifier does not check yet
 
-Presolve transform replay and cut derivations. A certificate carrying either of
-those records is **refused**, and refused with a message saying that this
+Cut derivations. A certificate carrying one of those records is **refused**, and refused with a message saying that this
 implementation does not close it — see
 [ADR-0010](adr/0010-a-verifier-refuses-what-it-cannot-check.md) for why that is
 a refusal rather than a skip. Each of those rules brings its own hand-worked

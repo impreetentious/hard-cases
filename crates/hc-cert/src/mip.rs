@@ -26,6 +26,9 @@ use hc_lp::exact::{Canonical, exact_multipliers, resting_value};
 use hc_mip::search::{Ending, Node, Search};
 use hc_mip::tree::{Assumption, Tree};
 
+use hc_presolve::chain::Chain;
+use hc_presolve::encode;
+
 use crate::assemble::{NoProof, model_hash, relative_gap};
 use crate::hcc::{Certificate, ClaimKind, Record};
 use crate::lp::{Axioms, Bounds, ModelBounds, Supply, assemble_with};
@@ -40,14 +43,97 @@ pub fn assemble_mip(
     instance: &[u8],
     search: &Search,
 ) -> Result<Certificate, NoProof> {
+    build(model, model, None, instance, search)
+}
+
+/// Assembles a certificate for a search over a reduced model.
+///
+/// The chain is written first, each record carrying the hash of the stage it
+/// produces, and the root then names the model the chain ends at. The
+/// incumbent carries both coordinate systems: the reduced point the tree is
+/// about, and the original-space point it lifts to, which the verifier checks
+/// against the original bytes independently.
+///
+/// # Errors
+///
+/// Returns [`NoProof`] naming what stopped the assembly.
+pub fn assemble_presolved(
+    original: &Model,
+    chain: &Chain,
+    instance: &[u8],
+    search: &Search,
+) -> Result<Certificate, NoProof> {
+    // A chain that ended in a contradiction proves infeasibility by itself.
+    // No root and no tree follow it, because they would imply support the
+    // certificate does not have.
+    if let Some(found) = &chain.contradiction {
+        let (rule, parameters) = encode(&found.rule);
+        let sources = parameters
+            .iter()
+            .take(match rule {
+                7 => 3,
+                _ => 2,
+            })
+            .map(|value| {
+                value
+                    .to_canonical_string()
+                    .parse::<u64>()
+                    .expect("an index parameter")
+            })
+            .collect();
+        let mut records = prefix(chain);
+        records.push(Record::TransformContradiction { rule, sources });
+        records.push(Record::Claim {
+            kind: ClaimKind::Infeasible,
+            objective: None,
+            lower: None,
+            gap: None,
+        });
+        return Ok(Certificate {
+            format_tag: original.format().byte(),
+            instance_bytes: instance.len() as u64,
+            digest: *original.digest(),
+            claim: ClaimKind::Infeasible,
+            records: Certificate::terminated(records),
+        });
+    }
+
+    build(&chain.reduced, original, Some(chain), instance, search)
+}
+
+/// The transform records a chain contributes.
+fn prefix(chain: &Chain) -> Vec<Record> {
+    chain
+        .steps
+        .iter()
+        .map(|step| {
+            let (rule, parameters) = encode(&step.rule);
+            Record::Transform {
+                rule,
+                parameters,
+                result: step.result,
+            }
+        })
+        .collect()
+}
+
+/// The body of both entry points.
+fn build(
+    model: &Model,
+    original: &Model,
+    chain: Option<&Chain>,
+    instance: &[u8],
+    search: &Search,
+) -> Result<Certificate, NoProof> {
     let axioms = Axioms::of(model);
     let base = model.inequalities().len() as u64;
     let root = Canonical::of(model);
 
-    let mut records = vec![Record::Root {
+    let mut records = chain.map(prefix).unwrap_or_default();
+    records.push(Record::Root {
         node: 0,
         model: model_hash(model),
-    }];
+    });
 
     // The identifier a node's own assumption received, filled in as the branch
     // that created it is written.
@@ -139,11 +225,11 @@ pub fn assemble_mip(
         }
     }
 
-    let claim = close(search, &root, &mut records)?;
+    let claim = close(search, &root, original, chain, &mut records)?;
     Ok(Certificate {
-        format_tag: model.format().byte(),
+        format_tag: original.format().byte(),
         instance_bytes: instance.len() as u64,
-        digest: *model.digest(),
+        digest: *original.digest(),
         claim,
         records: Certificate::terminated(records),
     })
@@ -153,6 +239,8 @@ pub fn assemble_mip(
 fn close(
     search: &Search,
     root: &Canonical,
+    original: &Model,
+    chain: Option<&Chain>,
     records: &mut Vec<Record>,
 ) -> Result<ClaimKind, NoProof> {
     match search.ending {
@@ -169,8 +257,8 @@ fn close(
             let incumbent = search.incumbent.as_ref().ok_or(NoProof::NothingToCertify)?;
             let point = structural(root, &incumbent.point);
             records.push(Record::Incumbent {
-                reduced: point.clone(),
-                original: point,
+                original: lifted(original, chain, &point),
+                reduced: point,
                 objective: incumbent.objective.clone(),
             });
             records.push(Record::Claim {
@@ -196,8 +284,8 @@ fn close(
             }
             let point = structural(root, &incumbent.point);
             records.push(Record::Incumbent {
-                reduced: point.clone(),
-                original: point,
+                original: lifted(original, chain, &point),
+                reduced: point,
                 objective: incumbent.objective.clone(),
             });
             records.push(Record::Claim {
@@ -220,6 +308,16 @@ fn close(
 /// ones an independent parser will have built.
 fn structural(root: &Canonical, point: &[Rational]) -> Vec<Rational> {
     root.structural_part(point).to_vec()
+}
+
+/// The original-space point a reduced one lifts to.
+///
+/// With no chain the two coordinate systems are one and the point is itself.
+fn lifted(original: &Model, chain: Option<&Chain>, point: &[Rational]) -> Vec<Rational> {
+    match chain {
+        None => point.to_vec(),
+        Some(chain) => chain.lift(original, point),
+    }
 }
 
 /// The exact view of a node's subproblem.
