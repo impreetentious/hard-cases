@@ -20,6 +20,10 @@ pub enum Command {
         dual: bool,
         /// Whether to reduce the model before searching.
         presolve: bool,
+        /// A file holding a candidate solution to start from.
+        solution: Option<String>,
+        /// Whether to branch by the textbook rule instead of pseudocosts.
+        simple_branching: bool,
     },
     /// Recheck a certificate against an instance.
     Verify {
@@ -51,6 +55,7 @@ pub enum Command {
 pub const USAGE: &str = "\
 usage:
   hc solve <instance> [--cert <file>] [--no-cert] [--dual] [--no-presolve]
+                      [--solution <file>] [--branching simple]
   hc verify <certificate> --instance <file>
   hc check <instance>
   hc explain <instance>
@@ -105,6 +110,8 @@ fn solve(arguments: &[String]) -> Option<Command> {
     let mut no_certificate = false;
     let mut dual = false;
     let mut presolve = true;
+    let mut solution = None;
+    let mut simple_branching = false;
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
@@ -136,6 +143,23 @@ fn solve(arguments: &[String]) -> Option<Command> {
                 presolve = false;
                 index += 1;
             }
+            "--solution" => {
+                if solution.is_some() {
+                    return None;
+                }
+                solution = Some(arguments.get(index + 1)?.clone());
+                index += 2;
+            }
+            "--branching" => {
+                // One rule is named and it is the only one that can be. The
+                // other is the default, and asking for it by name would be a
+                // second spelling of doing nothing.
+                if simple_branching || arguments.get(index + 1)? != "simple" {
+                    return None;
+                }
+                simple_branching = true;
+                index += 2;
+            }
             other if other.starts_with('-') => return None,
             other if instance.is_none() => {
                 instance = Some(other.to_owned());
@@ -156,6 +180,8 @@ fn solve(arguments: &[String]) -> Option<Command> {
         no_certificate,
         dual,
         presolve,
+        solution,
+        simple_branching,
     })
 }
 
@@ -204,6 +230,8 @@ mod tests {
                 no_certificate: false,
                 dual: false,
                 presolve: true,
+                solution: None,
+                simple_branching: false,
             })
         );
         assert_eq!(
@@ -214,6 +242,8 @@ mod tests {
                 no_certificate: false,
                 dual: false,
                 presolve: true,
+                solution: None,
+                simple_branching: false,
             })
         );
     }
@@ -228,9 +258,42 @@ mod tests {
                 no_certificate: false,
                 dual: true,
                 presolve: true,
+                solution: None,
+                simple_branching: false,
             })
         );
         assert_eq!(parse(&words(&["solve", "m.mps", "--dual", "--dual"])), None);
+    }
+
+    #[test]
+    fn a_solution_file_and_the_teaching_branching_rule_are_named() {
+        let parsed = parse(&words(&[
+            "solve",
+            "m.mps",
+            "--solution",
+            "start.txt",
+            "--branching",
+            "simple",
+        ]));
+        assert_eq!(
+            parsed,
+            Some(Command::Solve {
+                instance: "m.mps".to_owned(),
+                certificate: None,
+                no_certificate: false,
+                dual: false,
+                presolve: true,
+                solution: Some("start.txt".to_owned()),
+                simple_branching: true,
+            })
+        );
+        assert_eq!(parse(&words(&["solve", "m.mps", "--branching"])), None);
+        assert_eq!(
+            parse(&words(&["solve", "m.mps", "--branching", "clever"])),
+            None,
+            "the only rule that can be asked for by name is the teaching one"
+        );
+        assert_eq!(parse(&words(&["solve", "m.mps", "--solution"])), None);
     }
 
     #[test]
@@ -243,6 +306,8 @@ mod tests {
                 no_certificate: false,
                 dual: false,
                 presolve: false,
+                solution: None,
+                simple_branching: false,
             })
         );
         assert_eq!(

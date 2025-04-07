@@ -14,6 +14,7 @@ path = "src/main.rs"
 hc-bench = { path = "../hc-bench" }
 hc-cert = { path = "../hc-cert" }
 hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
 hc-io = { path = "../hc-io" }
 hc-lp = { path = "../hc-lp" }
 hc-mip = { path = "../hc-mip" }

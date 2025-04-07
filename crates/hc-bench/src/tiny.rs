@@ -22,11 +22,15 @@ use std::fmt::Write as _;
 use hc_cert::mip::assemble_mip;
 use hc_core::{Model, Xoshiro256PlusPlus};
 use hc_io::mps::{Form, read};
+use hc_mip::branching::Branching;
 use hc_mip::search::{Ending, Options, run};
 use hc_verify::vclose::verify;
 use hc_verify::vhcc::Claim;
 
+use hc_presolve::reduce;
+
 use crate::exhaustive::{Truth, best};
+use crate::proof::claim_word;
 
 /// The largest box product the oracle is asked to walk.
 pub const BOX_CAP: u64 = 1 << 12;
@@ -173,6 +177,40 @@ fn small(generator: &mut Xoshiro256PlusPlus, limit: u64) -> i64 {
     generator.next_below(limit * 2 + 1) as i64 - limit as i64
 }
 
+/// One combination of the settings a search can be run under.
+///
+/// The settings change how the search gets there and change nothing about
+/// where it arrives. Sweeping them is how that stops being an assertion: every
+/// instance is answered under every combination, and every answer is compared
+/// against enumeration and against a verified certificate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Setting {
+    /// Whether the model is reduced first.
+    pub presolve: bool,
+    /// Whether branching uses the textbook rule.
+    pub simple: bool,
+}
+
+/// Every combination, in a fixed order.
+pub const SETTINGS: &[Setting] = &[
+    Setting {
+        presolve: false,
+        simple: false,
+    },
+    Setting {
+        presolve: false,
+        simple: true,
+    },
+    Setting {
+        presolve: true,
+        simple: false,
+    },
+    Setting {
+        presolve: true,
+        simple: true,
+    },
+];
+
 /// Runs a campaign.
 #[must_use]
 pub fn run_campaign(seed: u64, rounds: usize) -> Report {
@@ -188,6 +226,103 @@ pub fn run_campaign(seed: u64, rounds: usize) -> Report {
     }
 
     report
+}
+
+/// Runs a campaign under every combination of the settings.
+///
+/// Each instance is answered four ways, and all four must agree with
+/// enumeration and with their own verified certificates.
+#[must_use]
+pub fn run_sweep(seed: u64, rounds: usize) -> Report {
+    let mut generator = Xoshiro256PlusPlus::from_seed(seed);
+    let mut report = Report::default();
+
+    for round in 0..rounds {
+        let rows = 1 + (round % 3);
+        let columns = 1 + (round % 4);
+        let instance = generate(&mut generator, rows, columns);
+        report.rounds += 1;
+        for setting in SETTINGS {
+            swept(round, &instance, *setting, &mut report);
+        }
+    }
+
+    report
+}
+
+/// One instance under one setting.
+fn swept(round: usize, instance: &Instance, setting: Setting, report: &mut Report) {
+    let truth = best(&instance.model, BOX_CAP);
+    if matches!(truth, Truth::Beyond { .. }) {
+        return;
+    }
+    report.answerable += 1;
+
+    let options = Options {
+        branching: if setting.simple {
+            Branching::MostFractional
+        } else {
+            Branching::ReliabilityPseudocost
+        },
+        ..Options::default()
+    };
+    let raw = instance.source.as_bytes();
+    let chain = setting.presolve.then(|| reduce(&instance.model));
+    let reduced = chain
+        .as_ref()
+        .map_or(&instance.model, |chain| &chain.reduced);
+    let search = run(reduced, &options);
+    report.widest_tree = report.widest_tree.max(search.tree.len());
+
+    let assembled = match &chain {
+        Some(chain) => hc_cert::mip::assemble_presolved(&instance.model, chain, raw, &search),
+        None => assemble_mip(&instance.model, raw, &search),
+    };
+    let assembled = match assembled {
+        Ok(assembled) => assembled,
+        Err(reason) => {
+            *report.declined.entry(reason.kind().to_owned()).or_insert(0) += 1;
+            return;
+        }
+    };
+
+    match verify(&assembled.encode(), raw) {
+        Err(refusal) => report.findings.push(Finding {
+            round,
+            detail: format!("{setting:?}: the verifier refused: {refusal}"),
+            source: instance.source.clone(),
+        }),
+        Ok(verdict) => {
+            let word = claim_word(verdict.claim);
+            *report.certified.entry(word.to_owned()).or_insert(0) += 1;
+            if !agrees(word, &verdict, &truth) {
+                report.findings.push(Finding {
+                    round,
+                    detail: format!(
+                        "{setting:?}: certified {word} against enumeration's {truth:?}"
+                    ),
+                    source: instance.source.clone(),
+                });
+            }
+        }
+    }
+}
+
+/// Whether a certified claim and an enumerated answer can both be true.
+fn agrees(word: &str, verdict: &hc_verify::vclose::Verdict, truth: &Truth) -> bool {
+    match (word, truth) {
+        ("optimal", Truth::Optimal { value, .. }) => {
+            verdict
+                .objective
+                .as_ref()
+                .map(hc_verify::vrat::Frac::to_canonical)
+                .as_deref()
+                == Some(value.to_canonical_string().as_str())
+        }
+        ("optimal", Truth::Infeasible) | ("infeasible", Truth::Optimal { .. }) => false,
+        ("infeasible", Truth::Infeasible) => true,
+        _ => true,
+    }
 }
 
 /// One instance, from search to oracle to verifier.
@@ -251,13 +386,7 @@ fn one(round: usize, instance: &Instance, report: &mut Report) {
     match verify(&bytes, raw) {
         Err(refusal) => fail(format!("the verifier refused: {refusal}")),
         Ok(verdict) => {
-            let word = match verdict.claim {
-                Claim::Optimal => "optimal",
-                Claim::Infeasible => "infeasible",
-                Claim::Unbounded => "unbounded",
-                Claim::Gap => "gap",
-                Claim::PointOnly => "point",
-            };
+            let word = claim_word(verdict.claim);
             *report.certified.entry(word.to_owned()).or_insert(0) += 1;
 
             // Third: does the certified claim say the same thing the oracle

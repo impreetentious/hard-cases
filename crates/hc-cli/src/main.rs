@@ -67,11 +67,33 @@ fn main() -> ExitCode {
             no_certificate,
             dual,
             presolve,
+            solution,
+            simple_branching,
         } => {
             let Ok(bytes) = slurp(&instance) else {
                 return code(Ending::Misused);
             };
-            let solved = match run::search(&bytes, dual, presolve) {
+            let start = match solution.as_deref().map(slurp).transpose() {
+                Err(ending) => return code(ending),
+                Ok(None) => None,
+                Ok(Some(raw)) => match String::from_utf8(raw)
+                    .map_err(|_| String::from("the solution file is not text"))
+                    .and_then(|text| run::read_solution(&text))
+                {
+                    Ok(values) => Some(values),
+                    Err(message) => {
+                        eprintln!("hc: {message}");
+                        return code(Ending::Misused);
+                    }
+                },
+            };
+            let settings = run::Settings {
+                dual,
+                presolve,
+                solution: start,
+                simple_branching,
+            };
+            let solved = match run::search(&bytes, &settings) {
                 Ok(solved) => solved,
                 Err(message) => {
                     println!("REFUSED: {message}");

@@ -95,6 +95,33 @@ pub fn screen(canonical: &Canonical, point: &[Rational]) -> Result<Incumbent, Re
     })
 }
 
+/// Completes a point over the model's variables into one over the working
+/// shape.
+///
+/// The working shape carries a logical column per row standing for that row's
+/// activity, and a point over it has to state them. They are computed rather
+/// than asked for: a caller supplying a solution knows the variables and has
+/// no business knowing the shape the search works in.
+#[must_use]
+pub fn extend(canonical: &Canonical, structural: &[Rational]) -> Option<Vec<Rational>> {
+    if structural.len() != canonical.structural() {
+        return None;
+    }
+    let mut out = structural.to_vec();
+    let mut activities = vec![Rational::zero(); canonical.rows()];
+    for (column, value) in structural.iter().enumerate() {
+        if value.is_zero() {
+            continue;
+        }
+        for (row, coefficient) in canonical.column(column) {
+            let slot = &mut activities[*row as usize];
+            *slot = slot.add(&coefficient.mul(value));
+        }
+    }
+    out.extend(activities);
+    Some(out)
+}
+
 /// The most fractional integer column of a point, and the integer to split at.
 ///
 /// "Most fractional" means the component whose distance from the nearest
@@ -201,6 +228,17 @@ mod tests {
     fn a_candidate_of_the_wrong_length_is_refused_rather_than_padded() {
         let canonical = Canonical::of(&model());
         assert_eq!(screen(&canonical, &[]), Err(Rejected::Dimension));
+    }
+
+    #[test]
+    fn a_point_over_the_variables_is_completed_with_the_row_activities() {
+        let canonical = Canonical::of(&model());
+        let completed = extend(&canonical, &[whole(3)]).expect("one variable");
+        assert_eq!(completed.len(), canonical.columns());
+        // The single row is x, so its activity is three.
+        assert_eq!(completed[1].to_canonical_string(), "3");
+        assert!(extend(&canonical, &[]).is_none());
+        assert!(extend(&canonical, &[whole(1), whole(1)]).is_none());
     }
 
     #[test]

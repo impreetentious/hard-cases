@@ -18,6 +18,7 @@ use hc_core::{Model, Tol};
 use hc_io::mps::{Form, read};
 use hc_lp::dual::solve_from as solve_dual;
 use hc_lp::{Basis, Effort, Options, Outcome, Problem, Working, solve};
+use hc_mip::branching::Branching;
 use hc_mip::search::{Options as MipOptions, run as search_tree};
 use hc_presolve::{Chain, reduce};
 use hc_verify::vcli::{accepted, refused};
@@ -52,6 +53,42 @@ pub fn check(raw: &[u8]) -> (String, Ending) {
     }
 }
 
+/// What a solve was asked to do.
+#[derive(Clone, Debug, Default)]
+pub struct Settings {
+    /// Whether to try the dual method.
+    pub dual: bool,
+    /// Whether to reduce the model first.
+    pub presolve: bool,
+    /// A candidate solution over the model's variables.
+    pub solution: Option<Vec<hc_exact::Rational>>,
+    /// Whether to branch by the textbook rule.
+    pub simple_branching: bool,
+}
+
+/// Reads a solution file: one exact decimal value per line, in variable order.
+///
+/// Blank lines and lines beginning with a number sign are ignored, so a file
+/// can carry a note about where it came from. Nothing here decides whether the
+/// point is any good; the search screens it exactly.
+///
+/// # Errors
+///
+/// Returns the message to print when a line is not a number.
+pub fn read_solution(text: &str) -> Result<Vec<hc_exact::Rational>, String> {
+    let mut out = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let body = line.split('#').next().unwrap_or_default().trim();
+        if body.is_empty() {
+            continue;
+        }
+        let value = hc_exact::Rational::parse_decimal(body)
+            .map_err(|error| format!("line {}: {error}", number + 1))?;
+        out.push(value);
+    }
+    Ok(out)
+}
+
 /// The outcome of a solve, before anything is claimed about it.
 pub struct Solved {
     /// The parsed model.
@@ -78,11 +115,29 @@ pub struct Solved {
 /// # Errors
 ///
 /// Returns the message to print when the file is not a readable instance.
-pub fn search(raw: &[u8], dual: bool, presolve: bool) -> Result<Solved, String> {
+pub fn search(raw: &[u8], settings: &Settings) -> Result<Solved, String> {
     let model = parse_instance(raw)?;
-    let chain = presolve.then(|| reduce(&model));
+    let chain = settings.presolve.then(|| reduce(&model));
     let reduced = chain.as_ref().map_or(&model, |chain| &chain.reduced);
-    let tree = search_tree(reduced, &MipOptions::default());
+
+    // A supplied solution is over the reduced model's variables, because that
+    // is the model the search is about. It is screened inside the search, like
+    // every other candidate.
+    let start = settings
+        .solution
+        .as_ref()
+        .and_then(|values| hc_mip::extend(&hc_lp::exact::Canonical::of(reduced), values));
+    let options = MipOptions {
+        start,
+        branching: if settings.simple_branching {
+            Branching::MostFractional
+        } else {
+            Branching::ReliabilityPseudocost
+        },
+        ..MipOptions::default()
+    };
+    let tree = search_tree(reduced, &options);
+    let dual = settings.dual;
 
     let working = Working::from_model(&model);
     let problem = Problem::scaled(&working, Tol::solver());
@@ -294,7 +349,14 @@ mod tests {
 
     #[test]
     fn a_solve_reports_only_what_the_verifier_accepted() {
-        let solved = search(TINY, false, true).expect("the frozen instance parses");
+        let solved = search(
+            TINY,
+            &Settings {
+                presolve: true,
+                ..Settings::default()
+            },
+        )
+        .expect("the frozen instance parses");
         let (out, bytes, ending) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         assert_eq!(ending, Ending::Fine);
         assert!(bytes.is_some());
@@ -304,7 +366,14 @@ mod tests {
 
     #[test]
     fn refusing_to_certify_produces_a_candidate_that_says_it_is_one() {
-        let solved = search(TINY, false, true).expect("the frozen instance parses");
+        let solved = search(
+            TINY,
+            &Settings {
+                presolve: true,
+                ..Settings::default()
+            },
+        )
+        .expect("the frozen instance parses");
         let out = candidate(&solved);
         assert!(out.contains("candidate-"));
         assert!(out.contains("(uncertified)"));
@@ -313,7 +382,14 @@ mod tests {
 
     #[test]
     fn the_wrapper_prints_exactly_what_the_library_renders() {
-        let solved = search(TINY, false, true).expect("the frozen instance parses");
+        let solved = search(
+            TINY,
+            &Settings {
+                presolve: true,
+                ..Settings::default()
+            },
+        )
+        .expect("the frozen instance parses");
         let (_, bytes, _) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         let bytes = bytes.expect("a certificate");
         let (wrapper, ending) = recheck("tiny.hcc", &bytes, "tiny.mps", TINY);
@@ -327,11 +403,56 @@ mod tests {
     }
 
     #[test]
+    fn a_solution_file_is_read_as_exact_decimals_with_notes_ignored() {
+        let text = "# where this came from\n4\n\n0.25 # a quarter\n-3\n";
+        let values = read_solution(text).expect("the file reads");
+        let rendered: Vec<String> = values
+            .iter()
+            .map(hc_exact::Rational::to_canonical_string)
+            .collect();
+        assert_eq!(rendered, vec!["4", "1/4", "-3"]);
+
+        assert!(read_solution("4\nnot a number\n").is_err());
+    }
+
+    #[test]
+    fn a_supplied_solution_is_screened_rather_than_believed() {
+        // The frozen instance allows x up to four; nine is outside it.
+        let settings = Settings {
+            presolve: false,
+            solution: Some(vec![hc_exact::Rational::from_i64(9)]),
+            ..Settings::default()
+        };
+        let solved = search(TINY, &settings).expect("the frozen instance parses");
+        let (out, _, ending) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
+        assert_eq!(ending, Ending::Fine);
+        assert!(
+            out.contains("U = -4"),
+            "the search should reach its own answer"
+        );
+    }
+
+    #[test]
     fn the_dual_method_reports_whether_it_actually_ran() {
-        let plain = search(TINY, false, true).expect("the frozen instance parses");
+        let plain = search(
+            TINY,
+            &Settings {
+                presolve: true,
+                ..Settings::default()
+            },
+        )
+        .expect("the frozen instance parses");
         assert_eq!(plain.method, "primal");
 
-        let asked = search(TINY, true, true).expect("the frozen instance parses");
+        let asked = search(
+            TINY,
+            &Settings {
+                dual: true,
+                presolve: true,
+                ..Settings::default()
+            },
+        )
+        .expect("the frozen instance parses");
         assert!(
             asked.method == "dual" || asked.method == "dual-declined",
             "a run that asked for the dual reported {}",
@@ -360,7 +481,14 @@ mod tests {
 
     #[test]
     fn a_certificate_bound_to_another_instance_is_refused_by_the_wrapper() {
-        let solved = search(TINY, false, true).expect("the frozen instance parses");
+        let solved = search(
+            TINY,
+            &Settings {
+                presolve: true,
+                ..Settings::default()
+            },
+        )
+        .expect("the frozen instance parses");
         let (_, bytes, _) = certify("tiny.mps", TINY, "tiny.hcc", &solved);
         let bytes = bytes.expect("a certificate");
         let mut other = TINY.to_vec();

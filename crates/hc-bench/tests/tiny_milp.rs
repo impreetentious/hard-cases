@@ -75,3 +75,41 @@ fn the_nightly_tiny_campaign_is_clean() {
     expect_clean(&report);
     assert!(report.accepted() > NIGHTLY / 4, "{}", report.describe());
 }
+
+/// Every setting combination, on every instance.
+///
+/// The settings change how the search gets to an answer and change nothing
+/// about where it arrives. Sweeping them is how that stops being an assertion:
+/// four routes per instance, each compared against enumeration and each
+/// certified and independently rechecked.
+#[test]
+fn every_setting_reaches_the_same_answers() {
+    let report = hc_bench::tiny::run_sweep(0x7a17_0000_0000_0011, 400);
+    assert!(
+        report.clean(),
+        "the sweep found something\n{}",
+        report.describe()
+    );
+    // Four settings per instance, so the answerable count should be about four
+    // times the round count. A count near the round count would mean three of
+    // the four never ran.
+    assert!(
+        report.answerable > report.rounds * 3,
+        "only {} of {} runs were answerable\n{}",
+        report.answerable,
+        report.rounds * 4,
+        report.describe()
+    );
+}
+
+/// The nightly sweep.
+#[test]
+#[ignore = "nightly size; run with --ignored"]
+fn the_nightly_sweep_is_clean() {
+    let report = hc_bench::tiny::run_sweep(0x7a17_0000_0000_0013, 25_000);
+    assert!(
+        report.clean(),
+        "the nightly sweep found something\n{}",
+        report.describe()
+    );
+}

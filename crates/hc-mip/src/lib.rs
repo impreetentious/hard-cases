@@ -30,6 +30,6 @@ pub mod search;
 pub mod tree;
 
 pub use branching::{Branching, Pseudocosts};
-pub use incumbent::{Incumbent, screen};
+pub use incumbent::{Incumbent, extend, screen};
 pub use search::{Ending, Node, Options, Search, run};
 pub use tree::{Assumption, Tree};
