@@ -1,25 +1,40 @@
 //! The search itself.
 //!
-//! A deliberately small branch and bound: best-first by exact node bound, one
-//! integer split per node, cold child solves, no cuts, no presolve, no
-//! heuristics, no pseudocosts. That restraint is the point of this stage. The
-//! recursive proof structure is the thing being established, and establishing
-//! it with the rest of the machinery already in place would mean never knowing
-//! which part was responsible for what.
+//! A branch and bound: best-first by exact node bound with a plunge down each
+//! split's left child, one integer split per node, children warm-started from
+//! their parent's basis, cut rounds at shallow nodes, reliability pseudocost
+//! branching, and a ladder of primal heuristics at any node about to split.
+//! Presolve is not here — the search is handed a model that has already been
+//! reduced, and the chain that reduced it is answered for elsewhere.
 //!
-//! What happens at a node, in order. Solve the node's linear relaxation from
-//! cold. If it is infeasible, the node is closed and the reason is a
-//! contradiction that exists in the basis. If it is optimal, rebuild the exact
-//! vertex and the exact multipliers from the basis, and take the exact bound
-//! those multipliers establish — not the objective the simplex reported, which
-//! is a floating-point number about a scaled copy. If the exact bound is no
-//! better than the incumbent, the node is closed. If the exact vertex is
-//! integral, it is screened and may become the incumbent, and the node is
-//! closed by a point that attains its own bound. Otherwise split.
+//! None of that machinery decides anything. Every piece of it changes which
+//! nodes are opened, in what order, and how quickly an incumbent appears; not
+//! one of them changes what the tree proves. That is not a hope about the
+//! design, it is a thing the campaigns check — each of these can be turned off,
+//! and the search with it off must reach the same status and the same
+//! objective, every time. A feature that could change the answer would be a
+//! feature that decides what is true.
+//!
+//! What happens at a node, in order. Separate cuts, if this node still
+//! separates, keeping the ones whose derivation survives. Solve the node's
+//! linear relaxation, warm-started from the parent's basis when there is one
+//! that fits this shape and from cold when there is not. If it is infeasible,
+//! the node is closed and the reason is a contradiction that exists in the
+//! basis. If it is optimal, rebuild the exact vertex and the exact multipliers
+//! from the basis, and take the exact bound those multipliers establish — not
+//! the objective the simplex reported, which is a floating-point number about a
+//! scaled copy. If the exact bound is no better than the incumbent, the node is
+//! closed. If the exact vertex is integral, it is screened and may become the
+//! incumbent, and the node is closed by a point that attains its own bound.
+//! Otherwise guess at a solution and split — or, once the node budget is spent,
+//! stop at a frontier that carries its bound rather than splitting further.
 //!
 //! Every one of those closures is a claim, and each is recorded with the basis
 //! it came from so the certificate can be written from what happened rather
-//! than reconstructed afterwards.
+//! than reconstructed afterwards. A guess is not among them. A heuristic's
+//! candidate reaches the incumbent through the same exact screening an integral
+//! vertex passes, and a refused one leaves nothing behind but the record that
+//! it was tried.
 //!
 //! A node whose exact rebuild fails is not closed. It is recorded as unproved
 //! and left open, and a tree with an open node proves a gap rather than
@@ -97,8 +112,31 @@ pub struct Options {
     /// incumbent every later bound is measured against — the same gate the
     /// search's own integral vertices pass through. Turning them off changes
     /// how quickly an incumbent appears and nothing about what the tree
-    /// proves, which is what the campaign's setting sweep checks.
+    /// proves, which is what the campaign's setting sweep checks: it certifies
+    /// the same instances with the guessing on and off, and requires the
+    /// verifier to accept the same answer both times.
     pub heuristics: bool,
+    /// How many re-solves a single dive may spend.
+    ///
+    /// A dive is a search inside a search: it fixes the variable the relaxation
+    /// is least decided about, solves the smaller problem, and repeats. Left
+    /// uncapped it is depth-first search wearing a different name and costing
+    /// the same, so it is given a budget and abandons when the budget is gone.
+    pub dive_budget: usize,
+    /// How many rounds a single pump may spend.
+    ///
+    /// The pump alternates between the relaxation and the nearest integral
+    /// point, and the two are not guaranteed to meet. The budget is what makes
+    /// that acceptable rather than fatal.
+    pub pump_budget: usize,
+    /// The seed the pump's restarts are drawn from.
+    ///
+    /// The pump flips components when it cycles, and a flip is the only place
+    /// in the search where anything is chosen at random. The stream is derived
+    /// from this seed together with the instance digest and the node, so the
+    /// choice is reproducible: a pump that found a solution once finds it
+    /// again, on the same instance, at the same node, on any machine.
+    pub seed: u64,
     /// Whether a child starts from its parent's basis.
     ///
     /// A branch changes one bound and nothing else, so the parent's optimal
@@ -121,6 +159,9 @@ impl Default for Options {
             start: None,
             branching: Branching::ReliabilityPseudocost,
             heuristics: true,
+            dive_budget: 16,
+            pump_budget: 12,
+            seed: 0,
             warm_start: true,
         }
     }
@@ -205,6 +246,30 @@ pub enum Ending {
     NoProgress,
 }
 
+/// What an unbounded node relaxation left behind.
+///
+/// A relaxation that runs away proves nothing about the mixed-integer model on
+/// its own — the integer points may be bounded, or may not exist at all — so
+/// the search does not close on it. But the direction it found is the only
+/// place an integer-compatible ray can come from, and rebuilding it later
+/// needs the basis and the column that moved rather than the floating-point
+/// ray the simplex reported. Those are kept; the ray itself is not.
+///
+/// The first one is kept and later ones are not. One witness is all a claim
+/// can use, and a search that overwrote it would make which node was visited
+/// last into part of the answer.
+#[derive(Clone, Debug)]
+pub struct Unbounded {
+    /// The node whose relaxation was unbounded.
+    pub node: u64,
+    /// The basis it finished on.
+    pub basis: Basis,
+    /// The column whose movement was unbounded.
+    pub entering: usize,
+    /// Plus one when that column rises, minus one when it falls.
+    pub direction: i8,
+}
+
 /// One heuristic run, recorded whether or not it worked.
 ///
 /// The misses are the point. A search that filed only its successes would
@@ -239,6 +304,12 @@ pub struct Search {
     pub iterations: u64,
     /// Every heuristic run, in the order they happened, hits and misses alike.
     pub heuristics: Vec<Attempt>,
+    /// The witness an unbounded node relaxation left, when one did.
+    ///
+    /// Present exactly when the ending is [`Ending::UnboundedRelaxation`]. It
+    /// is what an integer-compatible ray is assembled from, and its absence is
+    /// why such a search would otherwise have nothing at all to say.
+    pub unbounded: Option<Unbounded>,
 }
 
 impl Search {
@@ -313,7 +384,7 @@ pub fn run(model: &Model, options: &Options) -> Search {
         bounding: false,
         opened: 0,
         iterations: 0,
-        unbounded: false,
+        unbounded: None,
         heuristics: Vec::new(),
     };
 
@@ -366,7 +437,7 @@ struct Walk {
     bounding: bool,
     opened: u64,
     iterations: u64,
-    unbounded: bool,
+    unbounded: Option<Unbounded>,
     /// Every heuristic run, hits and misses alike.
     heuristics: Vec<Attempt>,
 }
@@ -594,12 +665,46 @@ impl Walk {
             LpOutcome::Infeasible { basis, .. } => Node::Infeasible {
                 basis: basis.clone(),
             },
-            LpOutcome::Unbounded { .. } => {
-                self.unbounded = true;
+            LpOutcome::Unbounded {
+                basis,
+                entering,
+                direction,
+                ..
+            } => {
+                // The node is not closed by this. An unbounded relaxation is a
+                // statement about the relaxation, and the integer points it
+                // covers may be bounded or may not exist — so the node is
+                // recorded as unproved and the witness is kept for a claim
+                // that has to earn itself later.
+                if self.unbounded.is_none() {
+                    self.unbounded = Some(Unbounded {
+                        node: id,
+                        basis: basis.clone(),
+                        entering: *entering,
+                        direction: *direction,
+                    });
+                }
+
+                // A claim of unboundedness needs an integral point to travel
+                // from, and this is the last chance to look for one: the node
+                // is about to close unproved, and a relaxation that ran away
+                // at the root leaves the search nowhere else to find one. The
+                // vertex the ray departs from is a feasible point of the
+                // relaxation and generally fractional, so it is offered to the
+                // heuristics on the same terms as any other — they propose,
+                // the exact screening disposes, and a refusal costs the claim
+                // rather than corrupting it.
+                if options.heuristics && self.incumbent.is_none() {
+                    if let Ok(point) = exact_point(&canonical, basis, &|column| {
+                        resting_value(&canonical, basis, column)
+                    }) {
+                        self.guess(&canonical, &narrowed, &point, id, options);
+                    }
+                }
                 unproved(&"the relaxation is unbounded")
             }
             LpOutcome::Optimal { basis, .. } => {
-                let result = self.close(&canonical, basis, id, depth, options);
+                let result = self.close(&canonical, &narrowed, basis, id, depth, options);
                 // A child's region is inside its parent's, so its bound cannot
                 // be weaker. A bound that regressed is reported and the node
                 // stays open; it is never used to close anything.
@@ -641,6 +746,7 @@ impl Walk {
     fn close(
         &mut self,
         canonical: &Canonical,
+        narrowed: &Working,
         basis: &Basis,
         id: u64,
         depth: u32,
@@ -696,12 +802,12 @@ impl Walk {
             },
             Some(candidate) => {
                 // The relaxation's point is fractional, so this node is about
-                // to split. Before it does, the point is worth one guess: a
-                // rounded candidate costs a screening and, when it lands,
-                // gives every node still queued something to be closed
-                // against. What comes back is filed either way.
+                // to split. Before it does, the point is worth a guess: a
+                // candidate costs a screening and, when it lands, gives every
+                // node still queued something to be closed against. What comes
+                // back is filed either way.
                 if options.heuristics {
-                    self.guess(canonical, &point, id);
+                    self.guess(canonical, narrowed, &point, id, options);
                 }
                 if self.bounding || depth >= options.depth_limit {
                     return Node::Frontier {
@@ -723,37 +829,115 @@ impl Walk {
         }
     }
 
-    /// Runs the rounding heuristic at a node and files what it did.
+    /// Runs the primal heuristics at a node and files what each of them did.
     ///
-    /// The screening handed to the heuristic is the search's own, so a
+    /// The screening handed to every heuristic is the search's own, so a
     /// candidate is accepted on exactly the terms an integral vertex is: the
     /// original system satisfied with no residual, every bound respected, and
     /// every integer column holding an integer. A heuristic that could accept
     /// its own candidates would be a heuristic that decides what is true.
-    fn guess(&mut self, canonical: &Canonical, point: &[Rational], id: u64) {
-        let outcome = hc_heur::round::round(canonical, point, &|candidate| {
+    ///
+    /// The three of them are a ladder, cheapest first, and it stops the moment
+    /// an incumbent exists. Rounding costs one screening and runs at every node
+    /// that is about to split. Diving and the pump each cost a run of linear
+    /// solves, and they are worth that only while the search has nothing at all
+    /// to prune against — which is the situation they exist for, and the one
+    /// where a tree grows without ever closing a node. Once any point has
+    /// survived screening, the expensive two stand down and rounding carries on
+    /// alone.
+    fn guess(
+        &mut self,
+        canonical: &Canonical,
+        narrowed: &Working,
+        point: &[Rational],
+        id: u64,
+        options: &Options,
+    ) {
+        let screening = |candidate: &[Rational]| {
             screen(canonical, candidate)
                 .map(|found| found.objective)
                 .map_err(|reason| reason.to_string())
-        });
-        if let hc_heur::Outcome::Found { point, objective } = &outcome {
-            let better = self
-                .incumbent
-                .as_ref()
-                .is_none_or(|best| objective.cmp_value(&best.objective).is_lt());
-            if better {
-                // The objective is the one the screening recomputed from the
-                // point, not one the heuristic carried in, so the incumbent
-                // records what the model says rather than what a guess hoped.
-                self.incumbent = Some(Incumbent {
-                    point: point.clone(),
-                    objective: objective.clone(),
-                });
-            }
+        };
+
+        let outcome = hc_heur::round::round(canonical, point, &screening);
+        self.adopt(&outcome);
+        self.file(id, "round", &outcome);
+        if self.incumbent.is_some() {
+            return;
         }
+
+        // The dive's own solves are charged to the search's meter like every
+        // other one. A heuristic that spent iterations off the books would make
+        // the effort budget describe a search that did less work than it did.
+        let mut spent = 0;
+        let outcome = {
+            let mut resolve = |fixings: &[hc_heur::dive::Fix]| {
+                let (point, effort) = fixed_relaxation(canonical, narrowed, fixings);
+                spent += effort;
+                point
+            };
+            hc_heur::dive::dive(
+                canonical,
+                point,
+                options.dive_budget,
+                &mut resolve,
+                &screening,
+            )
+        };
+        self.iterations += spent;
+        self.adopt(&outcome);
+        self.file(id, "dive", &outcome);
+        if self.incumbent.is_some() {
+            return;
+        }
+
+        let mut spent = 0;
+        let outcome = {
+            let mut resolve = |target: &[Rational]| {
+                let (point, effort) = nearest_relaxation(canonical, narrowed, target);
+                spent += effort;
+                point
+            };
+            hc_heur::pump::pump(
+                canonical,
+                point,
+                options.pump_budget,
+                pump_seed(canonical, id, options.seed),
+                &mut resolve,
+                &screening,
+            )
+        };
+        self.iterations += spent;
+        self.adopt(&outcome);
+        self.file(id, "pump", &outcome);
+    }
+
+    /// Takes a heuristic's candidate as the incumbent when it beats the one
+    /// standing, and does nothing at all otherwise.
+    fn adopt(&mut self, outcome: &hc_heur::Outcome) {
+        let hc_heur::Outcome::Found { point, objective } = outcome else {
+            return;
+        };
+        let better = self
+            .incumbent
+            .as_ref()
+            .is_none_or(|best| objective.cmp_value(&best.objective).is_lt());
+        if better {
+            // The objective is the one the screening recomputed from the
+            // point, not one the heuristic carried in, so the incumbent
+            // records what the model says rather than what a guess hoped.
+            self.incumbent = Some(Incumbent {
+                point: point.clone(),
+                objective: objective.clone(),
+            });
+        }
+    }
+
+    /// Files one heuristic run, hit or miss.
+    fn file(&mut self, id: u64, rule: &'static str, outcome: &hc_heur::Outcome) {
         self.heuristics.push(Attempt {
             node: id,
-            rule: "round",
+            rule,
             outcome: outcome.word(),
         });
     }
@@ -802,7 +986,7 @@ impl Walk {
             .flatten()
             .any(|node| matches!(node, Node::Frontier { .. }));
 
-        let ending = if self.unbounded {
+        let ending = if self.unbounded.is_some() {
             Ending::UnboundedRelaxation
         } else if unproved_any {
             Ending::NoProgress
@@ -823,6 +1007,7 @@ impl Walk {
             opened: self.opened,
             iterations: self.iterations,
             heuristics: self.heuristics,
+            unbounded: self.unbounded,
         }
     }
 }
@@ -910,6 +1095,120 @@ fn narrow(working: &Working, tree: &Tree, node: u64) -> Working {
         }
     }
     working.narrowed(&bounds)
+}
+
+/// Solves a node's relaxation with a dive's fixings applied, and rebuilds the
+/// exact point it reached.
+///
+/// The fixings narrow both views by the same amounts, so the basis the solver
+/// finishes on and the region the rebuild reads its resting values from are
+/// descriptions of one subproblem. Narrowing to a single value is how a fixing
+/// is expressed: it is a bound the dive assumed, not a variable removed, and
+/// the shape stays exactly what the node's own relaxation had.
+///
+/// Returns no point when the fixed relaxation is anything other than optimal —
+/// an infeasible dive is an ordinary outcome and the caller ends on it — along
+/// with the iterations the attempt spent either way.
+fn fixed_relaxation(
+    canonical: &Canonical,
+    working: &Working,
+    fixings: &[hc_heur::dive::Fix],
+) -> (Option<Vec<Rational>>, u64) {
+    let float: Vec<(usize, f64, f64)> = fixings
+        .iter()
+        .map(|fix| {
+            let value = fix.value.to_binary64();
+            (fix.column, value, value)
+        })
+        .collect();
+    let exact: Vec<(usize, Option<Rational>, Option<Rational>)> = fixings
+        .iter()
+        .map(|fix| (fix.column, Some(fix.value.clone()), Some(fix.value.clone())))
+        .collect();
+
+    let problem = Problem::scaled(&working.narrowed(&float), Tol::solver());
+    let (outcome, effort) = solve(&problem, &LpOptions::default());
+    let LpOutcome::Optimal { basis, .. } = &outcome else {
+        return (None, effort.iterations);
+    };
+    let region = canonical.narrowed(&exact);
+    let point = exact_point(&region, basis, &|column| {
+        resting_value(&region, basis, column)
+    })
+    .ok();
+    (point, effort.iterations)
+}
+
+/// Solves a node's relaxation under the pump's distance objective, and rebuilds
+/// the exact point it reached.
+///
+/// Only the objective moves. The region is the node's own, which is why the
+/// rebuild reads from the node's own exact view rather than a narrowed copy.
+///
+/// The objective pulls each integer column toward its target the only way a
+/// linear objective can: a column whose target sits at its lower bound is
+/// pushed down, one whose target sits at its upper bound is pushed up, and a
+/// column whose target is somewhere in between gets no term at all. That last
+/// case is a real gap and not an oversight — the distance to an interior
+/// integer is not a linear function of the column, and expressing it would take
+/// variables this problem does not have. Writing a term anyway would produce an
+/// objective that looks like a distance and is not one, which is a worse thing
+/// to walk by than an honest absence.
+///
+/// A target that leaves every term at zero gives the pump nothing to pull
+/// toward, so it is refused rather than answered with whatever vertex a
+/// zero objective happens to stop at.
+fn nearest_relaxation(
+    canonical: &Canonical,
+    working: &Working,
+    target: &[Rational],
+) -> (Option<Vec<Rational>>, u64) {
+    let mut costs = vec![0.0; working.columns()];
+    let mut pulled = false;
+    for (column, cost) in costs
+        .iter_mut()
+        .enumerate()
+        .take(working.structural().min(target.len()))
+    {
+        if !working.integral(column) {
+            continue;
+        }
+        let at = target[column].to_binary64();
+        if at <= working.lower(column) {
+            *cost = 1.0;
+            pulled = true;
+        } else if at >= working.upper(column) {
+            *cost = -1.0;
+            pulled = true;
+        }
+    }
+    if !pulled {
+        return (None, 0);
+    }
+
+    let problem = Problem::scaled(&working.with_costs(&costs), Tol::solver());
+    let (outcome, effort) = solve(&problem, &LpOptions::default());
+    let LpOutcome::Optimal { basis, .. } = &outcome else {
+        return (None, effort.iterations);
+    };
+    let point = exact_point(canonical, basis, &|column| {
+        resting_value(canonical, basis, column)
+    })
+    .ok();
+    (point, effort.iterations)
+}
+
+/// The seed one node's pump draws its restarts from.
+///
+/// Mixed from the instance digest, the caller's seed and the node identifier,
+/// so two nodes of one search pump differently, one node pumps the same way
+/// every time it is visited, and the whole thing moves when the seed does.
+/// Nothing here needs to be a good hash — it needs to be a fixed function of
+/// three numbers, and to be written down.
+fn pump_seed(canonical: &Canonical, node: u64, seed: u64) -> u64 {
+    let digest = canonical.digest();
+    let head = u64::from_le_bytes(digest[..8].try_into().expect("a digest is 32 bytes"));
+    head ^ seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ node.wrapping_mul(0xbf58_476d_1ce4_e5b9)
 }
 
 /// The exact view of the same subproblem, narrowed from the same path.

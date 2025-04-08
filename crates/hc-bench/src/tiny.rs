@@ -191,6 +191,8 @@ pub struct Setting {
     pub simple: bool,
     /// Whether cuts are separated.
     pub cuts: bool,
+    /// Whether primal heuristics run.
+    pub heuristics: bool,
 }
 
 /// Every combination, in a fixed order.
@@ -199,31 +201,53 @@ pub const SETTINGS: &[Setting] = &[
         presolve: false,
         simple: false,
         cuts: false,
+        heuristics: true,
     },
     Setting {
         presolve: false,
         simple: true,
         cuts: false,
+        heuristics: true,
     },
     Setting {
         presolve: true,
         simple: false,
         cuts: false,
+        heuristics: true,
     },
     Setting {
         presolve: true,
         simple: true,
         cuts: false,
+        heuristics: true,
     },
     Setting {
         presolve: false,
         simple: false,
         cuts: true,
+        heuristics: true,
     },
     Setting {
         presolve: true,
         simple: false,
         cuts: true,
+        heuristics: true,
+    },
+    // The same two configurations with the guessing turned off. A heuristic
+    // may only change how quickly an incumbent appears; if one ever changed
+    // what a tree proved, these two rows and the four above them would certify
+    // different answers to the same question.
+    Setting {
+        presolve: false,
+        simple: false,
+        cuts: true,
+        heuristics: false,
+    },
+    Setting {
+        presolve: true,
+        simple: false,
+        cuts: true,
+        heuristics: false,
     },
 ];
 
@@ -281,6 +305,7 @@ fn swept(round: usize, instance: &Instance, setting: Setting, report: &mut Repor
             Branching::ReliabilityPseudocost
         },
         cut_rounds: if setting.cuts { 2 } else { 0 },
+        heuristics: setting.heuristics,
         ..Options::default()
     };
     let raw = instance.source.as_bytes();

@@ -375,9 +375,43 @@ fn unbounded_records(
     direction: i8,
 ) -> Result<Vec<Record>, NoProof> {
     let base = checked_point(canonical, basis)?;
+    let ray = ray_direction(canonical, basis, entering, direction)?;
 
-    // The direction, rebuilt exactly: the entering column moves by one, every
-    // basic column moves to keep the system satisfied, and nothing else moves.
+    let records = vec![
+        Record::Ray {
+            base: canonical.structural_part(&base).to_vec(),
+            direction: canonical.structural_part(&ray).to_vec(),
+            // A linear claim needs no step. The model declares no integer
+            // column, so there is no lattice to stay on.
+            step: None,
+        },
+        Record::Claim {
+            kind: ClaimKind::Unbounded,
+            objective: None,
+            lower: None,
+            gap: None,
+        },
+    ];
+    Ok(Certificate::terminated(records))
+}
+
+/// Rebuilds an unbounded relaxation's direction exactly, over every column.
+///
+/// The simplex reports a ray of its own, and that ray is about the scaled
+/// problem in rounded numbers. This one is rebuilt from the model: the entering
+/// column moves by one, every basic column moves to keep the system satisfied,
+/// and nothing else moves.
+///
+/// Both the linear and the mixed-integer claims want this, which is why it is
+/// separate from either. What differs between them is the base point travelled
+/// from and whether a lattice step is required — not the direction, which is a
+/// fact about the region.
+pub(crate) fn ray_direction(
+    canonical: &Canonical,
+    basis: &Basis,
+    entering: usize,
+    direction: i8,
+) -> Result<Vec<Rational>, NoProof> {
     let mut column = vec![Rational::zero(); canonical.rows()];
     for (row, value) in canonical.column(entering) {
         column[*row as usize] = value.clone();
@@ -418,20 +452,7 @@ fn unbounded_records(
         return Err(NoProof::ResidualNotZero { row });
     }
 
-    let records = vec![
-        Record::Ray {
-            base: canonical.structural_part(&base).to_vec(),
-            direction: canonical.structural_part(&ray).to_vec(),
-            step: None,
-        },
-        Record::Claim {
-            kind: ClaimKind::Unbounded,
-            objective: None,
-            lower: None,
-            gap: None,
-        },
-    ];
-    Ok(Certificate::terminated(records))
+    Ok(ray)
 }
 
 fn point_only_records(canonical: &Canonical, basis: &Basis) -> Result<Vec<Record>, NoProof> {

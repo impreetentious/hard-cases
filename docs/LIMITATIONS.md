@@ -51,7 +51,15 @@ Certificates for linear programs: an optimal claim, an infeasibility, an
 original-space unbounded ray, a certified gap between an exact bound and an
 exact point, and a point carrying no bound at all.
 
-Certificates for cut-free branch-and-bound trees: the recursive cover, replayed
+Unboundedness of a mixed-integer model, which is a stronger statement than
+unboundedness of its relaxation and is checked as one. The certificate carries
+an integral feasible point, a recession direction, and a positive integer step;
+the verifier requires that the step be whole, that it clear every denominator
+the direction holds on an integer column, that the base point be integral where
+the model declares it, and that the objective strictly fall along the direction.
+A relaxation's ray offered on its own is refused.
+
+Certificates for branch-and-bound trees, cuts included: the recursive cover, replayed
 iteratively with an explicit depth cap so a legal proof deeper than the process
 call stack is checked rather than crashed on. Every node must have one parent
 and be reachable from the root, every node must be either branched or terminated
@@ -66,11 +74,18 @@ original model and then mapped forward through the chain onto the reduced one.
 
 ## What the verifier does not check yet
 
-Cut derivations. A certificate carrying one of those records is **refused**, and refused with a message saying that this
-implementation does not close it — see
-[ADR-0010](adr/0010-a-verifier-refuses-what-it-cannot-check.md) for why that is
-a refusal rather than a skip. Each of those rules brings its own hand-worked
-vectors when it lands.
+Nothing, at present. Every record kind the format defines now has a rule that
+closes it, cut derivations included: a Gomory or cover record is recomputed from
+the node's own inequalities rather than read, and a derivation that does not
+reproduce is refused.
+
+The arrangement that made this section necessary has not gone away. A record
+kind this implementation cannot close is **refused**, with a message saying so,
+rather than skipped — see
+[ADR-0010](adr/0010-a-verifier-refuses-what-it-cannot-check.md) for why a
+refusal is the honest response and a skip is not. The section stays because the
+format is expected to grow again, and a rule that lands without its hand-worked
+vectors lands here first.
 
 ## What the campaigns establish
 
@@ -105,6 +120,12 @@ an incident that turns one up becomes an entry rather than a footnote.
 - Single-threaded search. Parallelism exists only across instances in the bench
   harness.
 - No presolve probing and no symmetry detection.
+- An unbounded relaxation found under presolve produces no unboundedness claim.
+  The certificate's ray form is checked directly against the original bytes and
+  admits no transform records, and a direction does not lift through a transform
+  chain the way a point does — lifting is defined on points, and a direction is
+  the homogeneous part of one. Rather than invent a lift, such a search reports
+  no progress. Solving the same model with presolve off produces the claim.
 - No modelling language. Files in, results out.
 
 ## What the input readers accept

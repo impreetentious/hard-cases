@@ -21,7 +21,7 @@
 //! multipliers were computed against, which does not sum.
 
 use hc_core::{Model, RowId, Side, VarId};
-use hc_exact::Rational;
+use hc_exact::{BigInt, BigUint, Rational};
 use hc_lp::exact::{Canonical, exact_multipliers, resting_value};
 use hc_mip::search::{Ending, Node, Search};
 use hc_mip::tree::{Assumption, Tree};
@@ -29,7 +29,7 @@ use hc_mip::tree::{Assumption, Tree};
 use hc_presolve::chain::Chain;
 use hc_presolve::encode;
 
-use crate::assemble::{NoProof, model_hash, relative_gap};
+use crate::assemble::{NoProof, model_hash, ray_direction, relative_gap};
 use crate::hcc::{Certificate, ClaimKind, Record};
 use crate::lp::{Axioms, Bounds, ModelBounds, Supply, assemble_with};
 
@@ -125,6 +125,21 @@ fn build(
     instance: &[u8],
     search: &Search,
 ) -> Result<Certificate, NoProof> {
+    // An unbounded relaxation never produces a tree. Its claim is checked
+    // straight against the original bytes, so a root and a cover would be
+    // support the certificate does not have and does not want.
+    if matches!(search.ending, Ending::UnboundedRelaxation) {
+        return unbounded_certificate(model, original, chain, instance, search);
+    }
+
+    // A search that left a node with no bound at all cannot present a tree:
+    // its cover has a hole, and a gap claim needs every open frontier to prove
+    // something. What it may still have is a point, and a point is worth
+    // saying out loud on its own terms.
+    if matches!(search.ending, Ending::NoProgress) {
+        return point_only_certificate(model, original, chain, instance, search);
+    }
+
     let axioms = Axioms::of(model);
     let base = model.inequalities().len() as u64;
     let root = Canonical::of(model);
@@ -321,6 +336,139 @@ fn build(
     })
 }
 
+/// Assembles the integer-compatible ray certificate for an unbounded search.
+///
+/// A relaxation that runs away says nothing about the mixed-integer model by
+/// itself: the integer points inside that region may be bounded, and there may
+/// be none at all. What closes the gap is a lattice step — a positive integer
+/// `q` for which every integer component of `q d` is a whole number. Then from
+/// an integral feasible point `x0`, every `x0 + n q d` is feasible and integral
+/// for every nonnegative integer `n`, the objective falls without limit along
+/// them, and the model is unbounded over its own integer points rather than
+/// over a relaxation of them.
+///
+/// Three things are needed and each may be absent, in which case there is no
+/// claim to make and the search reports no progress rather than a weaker
+/// statement dressed up as this one:
+///
+/// - **A ray.** Kept by the search from the node whose relaxation ran away.
+///   The node's region is inside the model's, so a direction that recedes there
+///   recedes here too; branch assumptions and cuts only ever remove directions.
+/// - **An integral base point.** The incumbent, which reached that status by
+///   passing the same exact screening every candidate does. The relaxation's own
+///   vertex will not do — it is feasible but generally fractional, and a ray
+///   walked from a fractional point visits no integer point at all.
+/// - **No presolve.** A point lifts through the transform chain and a direction
+///   does not: lifting is defined on points, and a direction is the homogeneous
+///   part of one. Rather than invent a lift, a presolved search declines the
+///   claim. The ray form forbids transform records for the same reason, so
+///   there would be nowhere to record the chain even if it were lifted.
+fn unbounded_certificate(
+    model: &Model,
+    original: &Model,
+    chain: Option<&Chain>,
+    instance: &[u8],
+    search: &Search,
+) -> Result<Certificate, NoProof> {
+    if chain.is_some() {
+        return Err(NoProof::NothingToCertify);
+    }
+    let witness = search.unbounded.as_ref().ok_or(NoProof::NothingToCertify)?;
+    let incumbent = search.incumbent.as_ref().ok_or(NoProof::NothingToCertify)?;
+
+    let root = Canonical::of(model);
+    let (at, _) = at_node(&root, search, witness.node);
+    let ray = ray_direction(&at, &witness.basis, witness.entering, witness.direction)?;
+    let direction = at.structural_part(&ray).to_vec();
+
+    // The step is the least common multiple of the denominators the direction
+    // holds on integer columns, which is the smallest positive integer that
+    // clears every one of them at once. A column the model leaves continuous
+    // contributes nothing: it may move by any rational it likes.
+    let mut step = BigUint::from_u64(1);
+    for (column, value) in direction.iter().enumerate() {
+        if root.is_integral(column) {
+            step = step.lcm(value.denominator());
+        }
+    }
+
+    let records = vec![
+        Record::Ray {
+            base: structural(&root, &incumbent.point),
+            direction,
+            step: Some(Rational::from_int(BigInt::from_magnitude(step))),
+        },
+        Record::Claim {
+            kind: ClaimKind::Unbounded,
+            objective: None,
+            lower: None,
+            gap: None,
+        },
+    ];
+    Ok(Certificate {
+        format_tag: original.format().byte(),
+        instance_bytes: instance.len() as u64,
+        digest: *original.digest(),
+        claim: ClaimKind::Unbounded,
+        records: Certificate::terminated(records),
+    })
+}
+
+/// Assembles the point-only certificate for a search that proved no bound.
+///
+/// A tree with an uncertified node covers nothing: the region that node stood
+/// for is unaccounted for, so no bound follows from the rest and a gap claim is
+/// unavailable. The honest remainder is the incumbent itself — a point that is
+/// feasible in the original model, integral where declared, and attains the
+/// objective it states. That is a true thing to say, and it is the only true
+/// thing this search has.
+///
+/// The form carries the point and nothing else. Transform and tree records are
+/// forbidden in it, because a reader who saw a tree would reasonably infer that
+/// a bound existed somewhere in it, and none does. The verifier reparses the
+/// original bytes and checks the point directly.
+///
+/// With no incumbent there is nothing to say at all, and the search reports no
+/// progress — which is what the claim vocabulary reserves that status for.
+fn point_only_certificate(
+    model: &Model,
+    original: &Model,
+    chain: Option<&Chain>,
+    instance: &[u8],
+    search: &Search,
+) -> Result<Certificate, NoProof> {
+    let incumbent = search.incumbent.as_ref().ok_or(NoProof::NothingToCertify)?;
+    let root = Canonical::of(model);
+    let reduced = structural(&root, &incumbent.point);
+
+    // Unlike a direction, a point lifts through the chain, so a presolved
+    // search says this as readily as an unpresolved one. What travels is the
+    // original-space point, because that is the model the claim is about and
+    // the only one the verifier will have parsed.
+    let point = lifted(original, chain, &reduced);
+    let objective = original.objective_at(&point);
+
+    let records = vec![
+        Record::FeasiblePoint {
+            point,
+            objective: objective.clone(),
+        },
+        Record::Claim {
+            kind: ClaimKind::FeasibleNoBound,
+            objective: Some(objective),
+            lower: None,
+            gap: None,
+        },
+    ];
+    Ok(Certificate {
+        format_tag: original.format().byte(),
+        instance_bytes: instance.len() as u64,
+        digest: *original.digest(),
+        claim: ClaimKind::FeasibleNoBound,
+        records: Certificate::terminated(records),
+    })
+}
+
 /// Adds the incumbent and the claim, and says which claim it is.
 fn close(
     search: &Search,
@@ -382,6 +530,8 @@ fn close(
             });
             Ok(ClaimKind::FeasibleWithGap)
         }
+        // Neither of these reaches here: both are answered before the tree is
+        // built, because neither claim carries a tree.
         Ending::UnboundedRelaxation | Ending::NoProgress => Err(NoProof::NothingToCertify),
     }
 }

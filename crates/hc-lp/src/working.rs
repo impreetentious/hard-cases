@@ -153,6 +153,43 @@ impl Working {
         copy
     }
 
+    /// A copy that keeps this region and answers a different question about it.
+    ///
+    /// Only the objective changes. Every bound, every row and every column is
+    /// the one it already was, so a point optimal for the substituted objective
+    /// is a point of this same region — which is the only property a caller is
+    /// entitled to rely on here.
+    ///
+    /// The feasibility pump is what wants this. It walks by asking the
+    /// relaxation for the point nearest an integral target, which is a distance
+    /// question rather than the model's own, and the answer it gets back
+    /// establishes nothing at all: it is a guess, and it reaches an incumbent
+    /// only through the same exact screening every other candidate passes. A
+    /// substituted objective is therefore safe in the one way that matters, and
+    /// it would be unsafe the moment anything read an optimal *value* off it.
+    /// Nothing does.
+    ///
+    /// A `costs` slice shorter than the columns leaves the rest at zero, and a
+    /// longer one is truncated; neither is an error, because the caller is
+    /// building a vector over the structural columns and the logicals have no
+    /// cost to give.
+    ///
+    /// The digest is carried through unchanged, for the same reason
+    /// [`narrowed`](Self::narrowed) carries it: it names the file the model came
+    /// from, and asking a different question about that model does not make it a
+    /// different file.
+    #[must_use]
+    pub fn with_costs(&self, costs: &[f64]) -> Self {
+        let mut copy = self.clone();
+        for slot in &mut copy.cost {
+            *slot = 0.0;
+        }
+        for (slot, value) in copy.cost.iter_mut().zip(costs) {
+            *slot = *value;
+        }
+        copy
+    }
+
     /// One extra row: its terms over the model's variables, and its two sides.
     ///
     /// Named because the shape appears in three places and a tuple of a vector
@@ -440,6 +477,42 @@ mod narrowing_tests {
         let child = working.narrowed(&[(0, low - 100.0, high + 100.0)]);
         assert_eq!(child.lower(0), low);
         assert_eq!(child.upper(0), high);
+    }
+
+    #[test]
+    fn a_substituted_objective_keeps_the_region_and_the_instance() {
+        let working = Working::from_model(&model());
+        let costs: Vec<f64> = (0..working.columns()).map(|column| column as f64).collect();
+        let asked = working.with_costs(&costs);
+        for column in 0..working.columns() {
+            assert_eq!(asked.cost(column), column as f64);
+            assert_eq!(asked.lower(column), working.lower(column));
+            assert_eq!(asked.upper(column), working.upper(column));
+            assert_eq!(asked.integral(column), working.integral(column));
+        }
+        assert_eq!(asked.rows(), working.rows());
+        assert_eq!(asked.columns(), working.columns());
+        assert_eq!(asked.nonzeros(), working.nonzeros());
+        assert_eq!(asked.digest(), working.digest());
+    }
+
+    #[test]
+    fn a_short_cost_vector_zeroes_the_columns_it_does_not_reach() {
+        let working = Working::from_model(&model());
+        let asked = working.with_costs(&[7.0]);
+        assert_eq!(asked.cost(0), 7.0);
+        for column in 1..working.columns() {
+            assert_eq!(asked.cost(column), 0.0);
+        }
+    }
+
+    #[test]
+    fn a_long_cost_vector_is_truncated_rather_than_growing_the_shape() {
+        let working = Working::from_model(&model());
+        let costs = vec![1.0; working.columns() + 8];
+        let asked = working.with_costs(&costs);
+        assert_eq!(asked.columns(), working.columns());
+        assert_eq!(asked.rows(), working.rows());
     }
 
     #[test]

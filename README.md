@@ -56,7 +56,7 @@ The repository contains:
 - from-scratch exact arithmetic on both sides — two unrelated implementations,
   cross-checked against the same inert hand-worked vectors, with rationals built
   from the original file's decimal text rather than a float round-trip;
-- a revised simplex over bounded variables: Markowitz LU with Forrest–Tomlin
+- a revised simplex over bounded variables: Markowitz LU with product-form
   updates, devex pricing, a Harris ratio test, and a named escalation ladder
   through refactorization and perturbation to Bland's rule — at the end of which
   the honest status is that no progress was made;
@@ -123,4 +123,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.10.4
+**Version:** v0.10.5
