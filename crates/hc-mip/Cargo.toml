@@ -12,6 +12,11 @@ hc-core = { path = "../hc-core" }
 # before any of them is allowed to prune anything. That is the reason for this
 # edge and the only reason.
 hc-exact = { path = "../hc-exact" }
+# A heuristic proposes and the search disposes: every candidate this crate
+# accepts from `hc-heur` goes through the same exact screening a node's own
+# integral vertex does, which is why the dependency runs this way and never
+# back.
+hc-heur = { path = "../hc-heur" }
 hc-cuts = { path = "../hc-cuts" }
 hc-lp = { path = "../hc-lp" }
 

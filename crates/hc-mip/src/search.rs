@@ -90,6 +90,15 @@ pub struct Options {
     /// proves, which is why both rules exist and why a campaign runs the
     /// search under each and requires the same answers.
     pub branching: Branching,
+    /// Whether primal heuristics run at a node about to split.
+    ///
+    /// A heuristic establishes nothing. It proposes a point, the exact
+    /// screening accepts or refuses it, and an accepted one becomes the
+    /// incumbent every later bound is measured against — the same gate the
+    /// search's own integral vertices pass through. Turning them off changes
+    /// how quickly an incumbent appears and nothing about what the tree
+    /// proves, which is what the campaign's setting sweep checks.
+    pub heuristics: bool,
     /// Whether a child starts from its parent's basis.
     ///
     /// A branch changes one bound and nothing else, so the parent's optimal
@@ -111,6 +120,7 @@ impl Default for Options {
             cut_depth: 4,
             start: None,
             branching: Branching::ReliabilityPseudocost,
+            heuristics: true,
             warm_start: true,
         }
     }
@@ -195,6 +205,21 @@ pub enum Ending {
     NoProgress,
 }
 
+/// One heuristic run, recorded whether or not it worked.
+///
+/// The misses are the point. A search that filed only its successes would
+/// read as luckier than it was, and a panel drawing from this would show a
+/// solver that never guesses wrong. Every call leaves one of these behind.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attempt {
+    /// The node the heuristic ran at.
+    pub node: u64,
+    /// Which heuristic.
+    pub rule: &'static str,
+    /// What it did: `found`, `refused`, or `abandoned`.
+    pub outcome: &'static str,
+}
+
 /// What a search found.
 #[derive(Clone, Debug)]
 pub struct Search {
@@ -212,6 +237,8 @@ pub struct Search {
     pub opened: u64,
     /// Simplex iterations spent across every node.
     pub iterations: u64,
+    /// Every heuristic run, in the order they happened, hits and misses alike.
+    pub heuristics: Vec<Attempt>,
 }
 
 impl Search {
@@ -287,6 +314,7 @@ pub fn run(model: &Model, options: &Options) -> Search {
         opened: 0,
         iterations: 0,
         unbounded: false,
+        heuristics: Vec::new(),
     };
 
     while let Some(id) = walk.pick() {
@@ -339,6 +367,8 @@ struct Walk {
     opened: u64,
     iterations: u64,
     unbounded: bool,
+    /// Every heuristic run, hits and misses alike.
+    heuristics: Vec<Attempt>,
 }
 
 impl Walk {
@@ -665,6 +695,14 @@ impl Walk {
                 Err(reason) => unproved(&reason),
             },
             Some(candidate) => {
+                // The relaxation's point is fractional, so this node is about
+                // to split. Before it does, the point is worth one guess: a
+                // rounded candidate costs a screening and, when it lands,
+                // gives every node still queued something to be closed
+                // against. What comes back is filed either way.
+                if options.heuristics {
+                    self.guess(canonical, &point, id);
+                }
                 if self.bounding || depth >= options.depth_limit {
                     return Node::Frontier {
                         basis: basis.clone(),
@@ -683,6 +721,41 @@ impl Walk {
                 }
             }
         }
+    }
+
+    /// Runs the rounding heuristic at a node and files what it did.
+    ///
+    /// The screening handed to the heuristic is the search's own, so a
+    /// candidate is accepted on exactly the terms an integral vertex is: the
+    /// original system satisfied with no residual, every bound respected, and
+    /// every integer column holding an integer. A heuristic that could accept
+    /// its own candidates would be a heuristic that decides what is true.
+    fn guess(&mut self, canonical: &Canonical, point: &[Rational], id: u64) {
+        let outcome = hc_heur::round::round(canonical, point, &|candidate| {
+            screen(canonical, candidate)
+                .map(|found| found.objective)
+                .map_err(|reason| reason.to_string())
+        });
+        if let hc_heur::Outcome::Found { point, objective } = &outcome {
+            let better = self
+                .incumbent
+                .as_ref()
+                .is_none_or(|best| objective.cmp_value(&best.objective).is_lt());
+            if better {
+                // The objective is the one the screening recomputed from the
+                // point, not one the heuristic carried in, so the incumbent
+                // records what the model says rather than what a guess hoped.
+                self.incumbent = Some(Incumbent {
+                    point: point.clone(),
+                    objective: objective.clone(),
+                });
+            }
+        }
+        self.heuristics.push(Attempt {
+            node: id,
+            rule: "round",
+            outcome: outcome.word(),
+        });
     }
 
     /// Files what happened at a node, growing the result vector to match the
@@ -749,6 +822,7 @@ impl Walk {
             ending,
             opened: self.opened,
             iterations: self.iterations,
+            heuristics: self.heuristics,
         }
     }
 }

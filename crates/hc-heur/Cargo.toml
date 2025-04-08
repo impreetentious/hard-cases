@@ -1,0 +1,21 @@
+[package]
+name = "hc-heur"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+# A heuristic proposes; the exact screening disposes. Every candidate leaves
+# this crate as a rational vector and is accepted only after the model itself
+# has been consulted, which is why the exact arithmetic is here.
+hc-exact = { path = "../hc-exact" }
+hc-lp = { path = "../hc-lp" }
+
+[dev-dependencies]
+hc-io = { path = "../hc-io" }
+
+[lints]
+workspace = true
