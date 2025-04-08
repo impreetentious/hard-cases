@@ -148,6 +148,28 @@ edit = 'Swap two components of the original-space witness.'
 note = 'Both points may be feasible in their own models and they no longer correspond through the chain. A certificate whose two witnesses had come apart would report an objective that belonged to neither.'
 
 # ===========================================================================
+# Cuts
+# ===========================================================================
+
+[case.forged_gomory_coefficient]
+expect = 'HCC-CUT-05'
+resealed = true
+edit = 'Add one to the first coefficient a Gomory cut states.'
+note = 'The stated coefficients are a checksum and a display hint. The verifier derives the cut from the combination and compares, so an edited coefficient is a cut nobody derived rather than a stronger one.'
+
+[case.forged_cover_lift]
+expect = 'HCC-CUT-11'
+resealed = true
+edit = 'Add one to the first coefficient a cover cut states.'
+note = 'An overstated lifting coefficient is the dangerous mutation of this family: the cut looks stronger and removes feasible points. The dynamic program is rerun rather than the coefficient read.'
+
+[case.forged_cut_scope]
+expect = 'HCC-SCOPE-04'
+resealed = true
+edit = 'Relabel a cut with a node the tree does not contain.'
+note = 'A cut is true of the subtree it names. Relabelling it is how a local inequality escapes to somewhere it is not true, which would invalidate every descendant proof that cited it.'
+
+# ===========================================================================
 # The recursive cover
 # ===========================================================================
 

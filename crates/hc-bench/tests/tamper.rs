@@ -71,6 +71,25 @@ const KNAPSACK: &str = concat!(
 
 const TREES: &[(&str, &str)] = &[("branchy", BRANCHY), ("knapsack", KNAPSACK)];
 
+/// Instances whose search produces cuts, so the cut mutations have records to
+/// work on.
+const BINARY_KNAPSACK: &str = concat!(
+    "NAME BK\n",
+    "ROWS\n N obj\n L r0\n",
+    "COLUMNS\n MARKER 'MARKER' 'INTORG'\n",
+    " a obj -4 r0 3\n b obj -5 r0 4\n c obj -7 r0 5\n",
+    " MARKER 'MARKER' 'INTEND'\n",
+    "RHS\n rhs r0 7\n",
+    "BOUNDS\n UI b a 1\n UI b b 1\n UI b c 1\n",
+    "ENDATA\n",
+);
+
+const CUTTABLE: &[(&str, &str)] = &[
+    ("knapsack", KNAPSACK),
+    ("branchy", BRANCHY),
+    ("binary-knapsack", BINARY_KNAPSACK),
+];
+
 /// Two instances that genuinely reduce, so the chain mutations have a chain to
 /// work on.
 const REDUCIBLE: &str = concat!(
@@ -170,6 +189,22 @@ fn genuine_chain(name: &str, raw: &[u8]) -> Vec<u8> {
     assemble_presolved(&model, &chain, raw, &search)
         .unwrap_or_else(|e| panic!("{name} produced no certificate: {e}"))
         .encode()
+}
+
+/// Searches with cut rounds and returns the certificate it earns.
+fn genuine_cuts(name: &str, raw: &[u8]) -> Option<Vec<u8>> {
+    let model = read(raw, Form::Free).unwrap_or_else(|e| panic!("{name} does not parse: {e}"));
+    let search = search_tree(
+        &model,
+        &MipOptions {
+            cut_rounds: 3,
+            ..MipOptions::default()
+        },
+    );
+    if search.pool.is_empty() {
+        return None;
+    }
+    Some(assemble_mip(&model, raw, &search).ok()?.encode())
 }
 
 fn manifest() -> SpecDocument {
@@ -319,6 +354,45 @@ fn every_forgery_is_refused_by_the_rule_the_corpus_names() {
                 Err(refusal) => refusal,
                 Ok(verdict) => panic!(
                     "{instance_name}/{}: a forged chain was accepted as {}",
+                    case.name,
+                    verdict.claim.word()
+                ),
+            };
+            assert_eq!(
+                refusal.code.text(),
+                case.expect,
+                "{instance_name}/{}: refused by the wrong rule — {refusal}",
+                case.name
+            );
+        }
+    }
+
+    for (instance_name, source) in CUTTABLE {
+        let raw = source.as_bytes();
+        let Some(certificate) = genuine_cuts(instance_name, raw) else {
+            continue;
+        };
+        verify(&certificate, raw).unwrap_or_else(|e| {
+            panic!("{instance_name}: the genuine cut certificate was refused: {e}")
+        });
+
+        for case in CASES {
+            // The reattachment case needs a second instance and this loop has
+            // only one; it is exercised on every other base.
+            if case.name == "reattached_certificate" {
+                continue;
+            }
+            let Ok(forged) = forge(case.name, &certificate, raw) else {
+                continue;
+            };
+            if !applied.contains(&case.name) {
+                applied.push(case.name);
+            }
+            let against = raw;
+            let refusal = match verify(&forged, against) {
+                Err(refusal) => refusal,
+                Ok(verdict) => panic!(
+                    "{instance_name}/{}: a forged cut certificate was accepted as {}",
                     case.name,
                     verdict.claim.word()
                 ),

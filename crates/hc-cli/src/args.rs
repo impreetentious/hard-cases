@@ -24,6 +24,8 @@ pub enum Command {
         solution: Option<String>,
         /// Whether to branch by the textbook rule instead of pseudocosts.
         simple_branching: bool,
+        /// Whether to separate cuts.
+        cuts: bool,
     },
     /// Recheck a certificate against an instance.
     Verify {
@@ -55,7 +57,7 @@ pub enum Command {
 pub const USAGE: &str = "\
 usage:
   hc solve <instance> [--cert <file>] [--no-cert] [--dual] [--no-presolve]
-                      [--solution <file>] [--branching simple]
+                      [--solution <file>] [--branching simple] [--no-cuts]
   hc verify <certificate> --instance <file>
   hc check <instance>
   hc explain <instance>
@@ -112,6 +114,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
     let mut presolve = true;
     let mut solution = None;
     let mut simple_branching = false;
+    let mut cuts = true;
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
@@ -141,6 +144,13 @@ fn solve(arguments: &[String]) -> Option<Command> {
                     return None;
                 }
                 presolve = false;
+                index += 1;
+            }
+            "--no-cuts" => {
+                if !cuts {
+                    return None;
+                }
+                cuts = false;
                 index += 1;
             }
             "--solution" => {
@@ -182,6 +192,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
         presolve,
         solution,
         simple_branching,
+        cuts,
     })
 }
 
@@ -232,6 +243,7 @@ mod tests {
                 presolve: true,
                 solution: None,
                 simple_branching: false,
+                cuts: true,
             })
         );
         assert_eq!(
@@ -244,6 +256,7 @@ mod tests {
                 presolve: true,
                 solution: None,
                 simple_branching: false,
+                cuts: true,
             })
         );
     }
@@ -260,6 +273,7 @@ mod tests {
                 presolve: true,
                 solution: None,
                 simple_branching: false,
+                cuts: true,
             })
         );
         assert_eq!(parse(&words(&["solve", "m.mps", "--dual", "--dual"])), None);
@@ -285,6 +299,7 @@ mod tests {
                 presolve: true,
                 solution: Some("start.txt".to_owned()),
                 simple_branching: true,
+                cuts: true,
             })
         );
         assert_eq!(parse(&words(&["solve", "m.mps", "--branching"])), None);
@@ -308,6 +323,7 @@ mod tests {
                 presolve: false,
                 solution: None,
                 simple_branching: false,
+                cuts: true,
             })
         );
         assert_eq!(

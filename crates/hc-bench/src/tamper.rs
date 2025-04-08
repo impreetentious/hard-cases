@@ -124,6 +124,21 @@ pub const CASES: &[Case] = &[
         resealed: true,
     },
     Case {
+        name: "forged_gomory_coefficient",
+        expect: "HCC-CUT-05",
+        resealed: true,
+    },
+    Case {
+        name: "forged_cover_lift",
+        expect: "HCC-CUT-11",
+        resealed: true,
+    },
+    Case {
+        name: "forged_cut_scope",
+        expect: "HCC-SCOPE-04",
+        resealed: true,
+    },
+    Case {
         name: "dropped_leaf",
         expect: "HCC-TREE-06",
         resealed: true,
@@ -472,6 +487,55 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
                             touched = true;
                         }
                     }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "forged_gomory_coefficient" => {
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::GmiCut { coefficients, .. } = record {
+                    if !touched {
+                        if let Some((_, value)) = coefficients.first_mut() {
+                            *value = value.add(&Rational::one());
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "forged_cover_lift" => {
+            let mut touched = false;
+            for record in records.iter_mut() {
+                if let Record::CoverCut { coefficients, .. } = record {
+                    if !touched {
+                        if let Some((_, value)) = coefficients.first_mut() {
+                            *value = value.add(&Rational::one());
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if !touched {
+                return Err(NotApplicable);
+            }
+        }
+        "forged_cut_scope" => {
+            // A cut relabelled with a node that does not exist. The subtree it
+            // claims to be true of is not in the tree at all.
+            let mut touched = false;
+            for record in records.iter_mut() {
+                match record {
+                    Record::GmiCut { scope, .. } | Record::CoverCut { scope, .. } if !touched => {
+                        *scope = 1_000_000;
+                        touched = true;
+                    }
+                    _ => {}
                 }
             }
             if !touched {

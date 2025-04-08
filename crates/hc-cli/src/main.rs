@@ -69,6 +69,7 @@ fn main() -> ExitCode {
             presolve,
             solution,
             simple_branching,
+            cuts,
         } => {
             let Ok(bytes) = slurp(&instance) else {
                 return code(Ending::Misused);
@@ -92,6 +93,7 @@ fn main() -> ExitCode {
                 presolve,
                 solution: start,
                 simple_branching,
+                cuts,
             };
             let solved = match run::search(&bytes, &settings) {
                 Ok(solved) => solved,

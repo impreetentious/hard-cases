@@ -90,14 +90,15 @@ fn every_setting_reaches_the_same_answers() {
         "the sweep found something\n{}",
         report.describe()
     );
-    // Four settings per instance, so the answerable count should be about four
-    // times the round count. A count near the round count would mean three of
-    // the four never ran.
+    // One run per setting per instance, so the answerable count should be
+    // close to the round count times the number of settings. A count near the
+    // round count alone would mean all but one of them never ran.
+    let settings = hc_bench::tiny::SETTINGS.len();
     assert!(
-        report.answerable > report.rounds * 3,
+        report.answerable > report.rounds * (settings - 1),
         "only {} of {} runs were answerable\n{}",
         report.answerable,
-        report.rounds * 4,
+        report.rounds * settings,
         report.describe()
     );
 }

@@ -64,6 +64,8 @@ pub struct Settings {
     pub solution: Option<Vec<hc_exact::Rational>>,
     /// Whether to branch by the textbook rule.
     pub simple_branching: bool,
+    /// Whether to separate cuts.
+    pub cuts: bool,
 }
 
 /// Reads a solution file: one exact decimal value per line, in variable order.
@@ -128,6 +130,7 @@ pub fn search(raw: &[u8], settings: &Settings) -> Result<Solved, String> {
         .as_ref()
         .and_then(|values| hc_mip::extend(&hc_lp::exact::Canonical::of(reduced), values));
     let options = MipOptions {
+        cut_rounds: if settings.cuts { 4 } else { 0 },
         start,
         branching: if settings.simple_branching {
             Branching::MostFractional
@@ -255,6 +258,20 @@ pub fn certify(
             let _ = core::fmt::Write::write_fmt(
                 &mut out,
                 format_args!("presolve     {replayed} transform(s) in the certificate\n"),
+            );
+            let cuts = assembled
+                .records
+                .iter()
+                .filter(|record| {
+                    matches!(
+                        record,
+                        hc_cert::hcc::Record::GmiCut { .. } | hc_cert::hcc::Record::CoverCut { .. }
+                    )
+                })
+                .count();
+            let _ = core::fmt::Write::write_fmt(
+                &mut out,
+                format_args!("cuts         {cuts} in the certificate\n"),
             );
             (out, Some(bytes), Ending::Fine)
         }

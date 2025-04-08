@@ -189,6 +189,8 @@ pub struct Setting {
     pub presolve: bool,
     /// Whether branching uses the textbook rule.
     pub simple: bool,
+    /// Whether cuts are separated.
+    pub cuts: bool,
 }
 
 /// Every combination, in a fixed order.
@@ -196,18 +198,32 @@ pub const SETTINGS: &[Setting] = &[
     Setting {
         presolve: false,
         simple: false,
+        cuts: false,
     },
     Setting {
         presolve: false,
         simple: true,
+        cuts: false,
     },
     Setting {
         presolve: true,
         simple: false,
+        cuts: false,
     },
     Setting {
         presolve: true,
         simple: true,
+        cuts: false,
+    },
+    Setting {
+        presolve: false,
+        simple: false,
+        cuts: true,
+    },
+    Setting {
+        presolve: true,
+        simple: false,
+        cuts: true,
     },
 ];
 
@@ -264,6 +280,7 @@ fn swept(round: usize, instance: &Instance, setting: Setting, report: &mut Repor
         } else {
             Branching::ReliabilityPseudocost
         },
+        cut_rounds: if setting.cuts { 2 } else { 0 },
         ..Options::default()
     };
     let raw = instance.source.as_bytes();
