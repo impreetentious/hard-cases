@@ -28,9 +28,13 @@
 //! is the single thing this project exists to refuse.
 
 use hc_core::{Model, Tol};
+use hc_cuts::pool::{Entry, Pool};
+use hc_cuts::separate;
 use hc_exact::Rational;
 use hc_lp::dual::solve_from as solve_dual;
+use hc_lp::exact::ExactRow;
 use hc_lp::exact::{Canonical, exact_multipliers, exact_point, resting_value};
+use hc_lp::working::ExtraRow;
 use hc_lp::{Basis, Options as LpOptions, Outcome as LpOutcome, Problem, Working, solve};
 
 use crate::branching::{
@@ -60,6 +64,19 @@ pub struct Options {
     /// dropped and the nodes that lose theirs are solved from cold — which is
     /// slower and reaches the same answers, as the warm-start trap requires.
     pub basis_cache: usize,
+    /// How many rounds of cut separation to run at a node.
+    ///
+    /// Zero turns cuts off entirely, which is how the search runs while the
+    /// certificate machinery for them is being built and how the campaign runs
+    /// the comparison that shows cuts change nothing about the answer.
+    pub cut_rounds: usize,
+    /// How deep in the tree cuts are still separated.
+    ///
+    /// A cut derived at a node is true of that node's region and of nothing
+    /// outside it, so a deep cut helps a small part of the tree and costs a
+    /// derivation everywhere it is carried. The cap is where that trade stops
+    /// paying.
+    pub cut_depth: u32,
     /// A candidate solution to start from.
     ///
     /// It goes through the same exact screening every other candidate does.
@@ -90,6 +107,8 @@ impl Default for Options {
             depth_limit: 64,
             plunge_depth: 32,
             basis_cache: 256,
+            cut_rounds: 0,
+            cut_depth: 4,
             start: None,
             branching: Branching::ReliabilityPseudocost,
             warm_start: true,
@@ -185,6 +204,8 @@ pub struct Search {
     pub nodes: Vec<Option<Node>>,
     /// The best point that survived exact screening.
     pub incumbent: Option<Incumbent>,
+    /// The cuts the search derived, with the subtree each is true of.
+    pub pool: Pool,
     /// How the search ended.
     pub ending: Ending,
     /// Nodes opened.
@@ -257,6 +278,7 @@ pub fn run(model: &Model, options: &Options) -> Search {
         cached: Vec::new(),
         bounds: vec![None],
         costs: Pseudocosts::new(root_exact_columns(model)),
+        pool: Pool::new(),
         nodes: vec![None],
         incumbent,
         open: vec![0],
@@ -300,6 +322,8 @@ struct Walk {
     bounds: Vec<Option<Rational>>,
     /// What splitting each column has cost, so far.
     costs: Pseudocosts,
+    /// The cuts derived so far, each carrying the subtree it is true of.
+    pool: Pool,
     nodes: Vec<Option<Node>>,
     incumbent: Option<Incumbent>,
     open: Vec<u64>,
@@ -386,6 +410,83 @@ impl Walk {
         }
     }
 
+    /// A node and every ancestor of it, the node first.
+    fn lineage(&self, node: u64) -> Vec<u64> {
+        let mut out = Vec::new();
+        let mut at = Some(node);
+        while let Some(id) = at {
+            out.push(id);
+            at = self.tree.get(id).and_then(|entry| entry.parent);
+        }
+        out
+    }
+
+    /// The floating relaxation a node solves: the model, narrowed by the path
+    /// and carrying the cuts visible there.
+    fn relaxation(&self, node: u64, lineage: &[u64]) -> Working {
+        let narrowed = narrow(&self.working, &self.tree, node);
+        let extra: Vec<ExtraRow> = self
+            .pool
+            .visible(lineage)
+            .into_iter()
+            .map(|entry| ExtraRow {
+                terms: entry
+                    .coefficients
+                    .iter()
+                    .map(|(column, value)| (*column, value.to_binary64()))
+                    .collect(),
+                low: entry.right.to_binary64(),
+                high: f64::INFINITY,
+            })
+            .collect();
+        narrowed.with_rows(&extra)
+    }
+
+    /// The exact view of the same relaxation.
+    fn exact_at(&self, node: u64, lineage: &[u64]) -> Canonical {
+        let narrowed = narrow_exact(&self.root_exact, &self.tree, node);
+        let extra: Vec<ExactRow> = self
+            .pool
+            .visible(lineage)
+            .into_iter()
+            .map(|entry| ExactRow {
+                terms: entry.coefficients.clone(),
+                low: Some(entry.right.clone()),
+                high: None,
+            })
+            .collect();
+        narrowed.with_rows(&extra)
+    }
+
+    /// Runs cut rounds at a node.
+    fn separate(&mut self, node: u64, lineage: &[u64], options: &Options) {
+        for _ in 0..options.cut_rounds {
+            let narrowed = self.relaxation(node, lineage);
+            let problem = Problem::scaled(&narrowed, Tol::solver());
+            let (outcome, effort) = solve(&problem, &LpOptions::default());
+            self.iterations += effort.iterations;
+            let LpOutcome::Optimal { basis, .. } = &outcome else {
+                return;
+            };
+            let canonical = self.exact_at(node, lineage);
+            let Ok(point) = exact_point(&canonical, basis, &|column| {
+                resting_value(&canonical, basis, column)
+            }) else {
+                return;
+            };
+
+            let mut found: Vec<Entry> = separate::gomory(&canonical, basis, &point, node);
+            found.extend(separate::cover(&canonical, &point, node));
+            let mut added = false;
+            for entry in found {
+                added |= self.pool.add(entry, lineage);
+            }
+            if !added {
+                return;
+            }
+        }
+    }
+
     /// Files a basis, dropping the oldest when the cache is full.
     fn cache(&mut self, id: u64, basis: Option<Basis>, limit: usize) {
         self.remember(id, basis);
@@ -405,7 +506,16 @@ impl Walk {
         let entry = self.tree.get(id).expect("an open node exists");
         let depth = entry.depth;
         let parent = entry.parent;
-        let narrowed = narrow(&self.working, &self.tree, id);
+        let lineage = self.lineage(id);
+
+        // Cut rounds first, if this node still separates. Each round solves
+        // the relaxation as it stands, looks for cuts that exclude the point
+        // it found, and adds the ones whose derivation survives.
+        if options.cut_rounds > 0 && depth <= options.cut_depth {
+            self.separate(id, &lineage, options);
+        }
+
+        let narrowed = self.relaxation(id, &lineage);
         let problem = Problem::scaled(&narrowed, Tol::solver());
 
         // The warm start, when there is one to use. A refusal is not a
@@ -413,9 +523,18 @@ impl Walk {
         // method's precondition against this child, and the honest response is
         // to solve from cold rather than to repair a start into something the
         // caller did not ask for.
+        //
+        // Shape is part of that precondition. A cut round at this node adds
+        // rows the parent's relaxation never had, so the remembered basis
+        // carries one column per row of a smaller problem. It describes a
+        // different subproblem rather than a start for this one, and padding
+        // it out to fit would be inventing basic columns nothing solved for.
         let warm = if options.warm_start {
             parent
                 .and_then(|at| self.bases.get(usize::try_from(at).ok()?).cloned().flatten())
+                .filter(|start| {
+                    start.basic().len() == problem.rows() && start.columns() == problem.columns()
+                })
                 .and_then(|start| solve_dual(&problem, start, &LpOptions::default()).ok())
         } else {
             None
@@ -436,9 +555,10 @@ impl Walk {
         };
         self.cache(id, finished, options.basis_cache);
 
-        // The exact view of the same subproblem, narrowed from the same path,
-        // so the search and the rebuild are looking at one region.
-        let canonical = narrow_exact(&self.root_exact, &self.tree, id);
+        // The exact view of the same subproblem, narrowed from the same path
+        // and carrying the same cuts, so the search and the rebuild are
+        // looking at one region.
+        let canonical = self.exact_at(id, &lineage);
 
         match &outcome {
             LpOutcome::Infeasible { basis, .. } => Node::Infeasible {
@@ -625,6 +745,7 @@ impl Walk {
             tree: self.tree,
             nodes: self.nodes,
             incumbent: self.incumbent,
+            pool: self.pool,
             ending,
             opened: self.opened,
             iterations: self.iterations,

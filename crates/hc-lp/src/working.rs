@@ -30,6 +30,17 @@ use hc_exact::Rational;
 pub const NO_BOUND: f64 = f64::INFINITY;
 
 /// The floating-point copy of a model.
+/// One row added to a working copy.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExtraRow {
+    /// The terms, over the model's variables.
+    pub terms: Vec<(usize, f64)>,
+    /// The lower side, or negative infinity.
+    pub low: f64,
+    /// The upper side, or infinity.
+    pub high: f64,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Working {
     row_count: usize,
@@ -137,6 +148,49 @@ impl Working {
             }
             if *high < copy.upper[*column] {
                 copy.upper[*column] = *high;
+            }
+        }
+        copy
+    }
+
+    /// One extra row: its terms over the model's variables, and its two sides.
+    ///
+    /// Named because the shape appears in three places and a tuple of a vector
+    /// and two floats is the kind of thing that gets passed in the wrong order
+    /// exactly once.
+    #[must_use]
+    pub fn extra_row(terms: Vec<(usize, f64)>, low: f64, high: f64) -> ExtraRow {
+        ExtraRow { terms, low, high }
+    }
+
+    /// A copy with extra rows appended.
+    ///
+    /// A cut is a row the model does not have. Adding it to the working copy
+    /// is how a relaxation is tightened; it is emphatically not how the model
+    /// changes, and the identifiers a proof cites are still the model's. The
+    /// extra rows go on the end so that nothing already numbered moves.
+    #[must_use]
+    pub fn with_rows(&self, extra: &[ExtraRow]) -> Self {
+        let mut copy = self.clone();
+        for ExtraRow { terms, low, high } in extra {
+            let row = copy.row_count;
+            copy.row_count += 1;
+            // The logical column standing for the new row's activity goes on
+            // the end of the columns, which is where every logical lives.
+            copy.lower.push(*low);
+            copy.upper.push(*high);
+            copy.cost.push(0.0);
+            copy.integral.push(false);
+            for (column, value) in terms {
+                if *column >= copy.structural || *value == 0.0 {
+                    continue;
+                }
+                let at = copy.starts[*column + 1];
+                copy.indices.insert(at, row as u32);
+                copy.values.insert(at, *value);
+                for start in copy.starts.iter_mut().skip(*column + 1) {
+                    *start += 1;
+                }
             }
         }
         copy

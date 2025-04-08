@@ -188,6 +188,51 @@ fn build(
         next_id += 2;
     }
 
+    // Then the cuts, in the order the pool holds them, each naming the node
+    // whose subtree it is true of. Their identifiers continue where the
+    // assumptions left off, and the verifier allocates them in the same order
+    // because it is reading the same stream.
+    let mut cut_ids: Vec<u64> = Vec::new();
+    for entry in search.pool.entries() {
+        let record = match &entry.derivation {
+            hc_cuts::pool::Derivation::Gomory {
+                combination,
+                isolated,
+            } => Record::GmiCut {
+                scope: entry.scope,
+                combination: combination
+                    .iter()
+                    .map(|(row, value)| (*row as u64, value.clone()))
+                    .collect(),
+                isolated: *isolated as u64,
+                coefficients: entry
+                    .coefficients
+                    .iter()
+                    .map(|(column, value)| (*column as u64, value.clone()))
+                    .collect(),
+                right: entry.right.clone(),
+            },
+            hc_cuts::pool::Derivation::Cover {
+                row,
+                members,
+                order,
+            } => Record::CoverCut {
+                scope: entry.scope,
+                source: *row as u64,
+                cover: members.iter().map(|column| *column as u64).collect(),
+                lift_order: order.iter().map(|column| *column as u64).collect(),
+                coefficients: entry
+                    .coefficients
+                    .iter()
+                    .map(|(column, value)| (*column as u64, value.clone()))
+                    .collect(),
+            },
+        };
+        records.push(record);
+        cut_ids.push(next_id);
+        next_id += 1;
+    }
+
     for entry in search.tree.entries() {
         let id = entry.id;
         let slot = usize::try_from(id).expect("a node identifier fits");
@@ -198,9 +243,10 @@ fn build(
         match node {
             Node::Split { .. } => {}
             Node::Infeasible { basis } => {
-                let canonical = at_node(&root, &search.tree, id);
-                let bounds = node_bounds(model, &axioms, &search.tree, &assumption_ids, id);
-                let inference = contradiction_at(&canonical, basis, model, &bounds)?;
+                let (canonical, cuts) = at_node(&root, search, id);
+                let mut bounds = node_bounds(model, &axioms, &search.tree, &assumption_ids, id);
+                bounds.cuts = cut_supply(search, &cut_ids, id);
+                let inference = contradiction_at(&canonical, basis, model, &bounds, &cuts)?;
                 let record = records.len() as u64;
                 records.push(Record::Contradiction {
                     node: id,
@@ -212,9 +258,10 @@ fn build(
                 });
             }
             Node::Bound { basis, value } | Node::Frontier { basis, value } => {
-                let canonical = at_node(&root, &search.tree, id);
-                let bounds = node_bounds(model, &axioms, &search.tree, &assumption_ids, id);
-                let terms = bound_at(&canonical, basis, model, &bounds, value)?;
+                let (canonical, cuts) = at_node(&root, search, id);
+                let mut bounds = node_bounds(model, &axioms, &search.tree, &assumption_ids, id);
+                bounds.cuts = cut_supply(search, &cut_ids, id);
+                let terms = bound_at(&canonical, basis, model, &bounds, &cuts, value)?;
                 let record = records.len() as u64;
                 records.push(Record::DualBound { node: id, terms });
                 records.push(if matches!(node, Node::Bound { .. }) {
@@ -234,9 +281,10 @@ fn build(
                 point,
                 value,
             } => {
-                let canonical = at_node(&root, &search.tree, id);
-                let bounds = node_bounds(model, &axioms, &search.tree, &assumption_ids, id);
-                let terms = bound_at(&canonical, basis, model, &bounds, value)?;
+                let (canonical, cuts) = at_node(&root, search, id);
+                let mut bounds = node_bounds(model, &axioms, &search.tree, &assumption_ids, id);
+                bounds.cuts = cut_supply(search, &cut_ids, id);
+                let terms = bound_at(&canonical, basis, model, &bounds, &cuts, value)?;
                 let record = records.len() as u64;
                 records.push(Record::DualBound { node: id, terms });
                 records.push(Record::LeafIntegral {
@@ -359,7 +407,12 @@ fn lifted(original: &Model, chain: Option<&Chain>, point: &[Rational]) -> Vec<Ra
 }
 
 /// The exact view of a node's subproblem.
-fn at_node(root: &Canonical, tree: &Tree, node: u64) -> Canonical {
+fn at_node(
+    root: &Canonical,
+    search: &Search,
+    node: u64,
+) -> (Canonical, Vec<Vec<(usize, Rational)>>) {
+    let tree = &search.tree;
     let mut bounds: Vec<(usize, Option<Rational>, Option<Rational>)> = Vec::new();
     for assumption in tree.path(node) {
         if assumption.at_most {
@@ -368,7 +421,55 @@ fn at_node(root: &Canonical, tree: &Tree, node: u64) -> Canonical {
             bounds.push((assumption.column, Some(assumption.value.clone()), None));
         }
     }
-    root.narrowed(&bounds)
+    let narrowed = root.narrowed(&bounds);
+
+    // The cuts visible at this node, in the order the search added them as
+    // rows. The exact rebuild has to see exactly the rows the search solved,
+    // or the multipliers it produces are about a different problem.
+    let visible = search.pool.visible(&lineage(tree, node));
+    let extra: Vec<hc_lp::exact::ExactRow> = visible
+        .iter()
+        .map(|entry| hc_lp::exact::ExactRow {
+            terms: entry.coefficients.clone(),
+            low: Some(entry.right.clone()),
+            high: None,
+        })
+        .collect();
+    let terms = visible
+        .iter()
+        .map(|entry| entry.coefficients.clone())
+        .collect();
+    (narrowed.with_rows(&extra), terms)
+}
+
+/// A node and every ancestor of it, the node first.
+fn lineage(tree: &Tree, node: u64) -> Vec<u64> {
+    let mut out = Vec::new();
+    let mut at = Some(node);
+    while let Some(id) = at {
+        out.push(id);
+        at = tree.get(id).and_then(|entry| entry.parent);
+    }
+    out
+}
+
+/// The identifier and right-hand side of each cut visible at a node, in the
+/// order the search added them as rows.
+fn cut_supply(search: &Search, ids: &[u64], node: u64) -> Vec<(u64, Rational)> {
+    let lineage = lineage(&search.tree, node);
+    search
+        .pool
+        .entries()
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| lineage.contains(&entry.scope))
+        .map(|(position, entry)| {
+            (
+                ids.get(position).copied().unwrap_or_default(),
+                entry.right.clone(),
+            )
+        })
+        .collect()
 }
 
 /// The bounds an inference at a node may cite.
@@ -378,10 +479,28 @@ struct NodeBounds<'a> {
     /// identifier.
     lower: Vec<Option<(u64, Rational)>>,
     upper: Vec<Option<(u64, Rational)>>,
+    /// The identifier and right-hand side of each cut row, in row order after
+    /// the model's own.
+    cuts: Vec<(u64, Rational)>,
 }
 
 impl Bounds for NodeBounds<'_> {
     fn row(&self, row: RowId, side: Side) -> Option<Supply> {
+        // Rows past the model's own are cuts. A cut is written `a . x >= b`,
+        // so it has a lower side and no upper one, and a multiplier that
+        // wanted the other side is asking for an inequality that does not
+        // exist.
+        let model_rows = self.model.model.rows().len();
+        if row.index() >= model_rows {
+            if side != Side::Lower {
+                return None;
+            }
+            let (id, right) = self.cuts.get(row.index() - model_rows)?;
+            return Some(Supply {
+                id: *id,
+                bound: right.clone(),
+            });
+        }
         // Branching never touches a row, so a row's sides are the model's.
         self.model.row(row, side)
     }
@@ -460,6 +579,7 @@ fn node_bounds<'a>(
         model: ModelBounds { model, axioms },
         lower,
         upper,
+        cuts: Vec::new(),
     }
 }
 
@@ -469,6 +589,7 @@ fn bound_at(
     basis: &hc_lp::Basis,
     model: &Model,
     bounds: &dyn Bounds,
+    cuts: &[Vec<(usize, Rational)>],
     expected: &Rational,
 ) -> Result<Vec<(u64, Rational)>, NoProof> {
     let costs: Vec<Rational> = (0..canonical.columns())
@@ -485,6 +606,7 @@ fn bound_at(
         model.rows().len(),
         model.variables().len(),
         model.matrix(),
+        cuts,
         &multipliers,
         &target,
         model.objective_constant(),
@@ -515,6 +637,7 @@ fn contradiction_at(
     basis: &hc_lp::Basis,
     model: &Model,
     bounds: &dyn Bounds,
+    cuts: &[Vec<(usize, Rational)>],
 ) -> Result<Vec<(u64, Rational)>, NoProof> {
     let point = hc_lp::exact::exact_point(canonical, basis, &|column| {
         resting_value(canonical, basis, column)
@@ -546,6 +669,7 @@ fn contradiction_at(
         model.rows().len(),
         model.variables().len(),
         model.matrix(),
+        cuts,
         &multipliers,
         &zero,
         &Rational::zero(),

@@ -134,6 +134,7 @@ pub fn assemble(
         model.rows().len(),
         model.variables().len(),
         model.matrix(),
+        &[],
         multipliers,
         target,
         constant,
@@ -203,11 +204,13 @@ impl Bounds for ModelBounds<'_> {
 ///
 /// Returns [`Gap::NoSuchBound`] when a nonzero multiplier would have to cite an
 /// inequality the supplier does not offer.
+#[allow(clippy::too_many_arguments)]
 pub fn assemble_with(
     bounds: &dyn Bounds,
     rows: usize,
     variables: usize,
     matrix: &hc_core::Matrix,
+    extra: &[Vec<(usize, Rational)>],
     multipliers: &[Rational],
     target: &[Rational],
     constant: &Rational,
@@ -243,6 +246,18 @@ pub fn assemble_with(
     let mut accounted = vec![Rational::zero(); variables];
     for (index, weight) in multipliers.iter().enumerate() {
         if weight.is_zero() {
+            continue;
+        }
+        // Rows past the model's own are cuts: inequalities the relaxation
+        // carries and the model does not, whose terms come from the caller.
+        if index >= rows {
+            let Some(terms) = extra.get(index - rows) else {
+                continue;
+            };
+            for (variable, coefficient) in terms {
+                let slot = &mut accounted[*variable];
+                *slot = slot.add(&weight.mul(coefficient));
+            }
             continue;
         }
         for (variable, coefficient) in by_row.row(RowId(index as u32)) {

@@ -12,6 +12,7 @@ hc-core = { path = "../hc-core" }
 # before any of them is allowed to prune anything. That is the reason for this
 # edge and the only reason.
 hc-exact = { path = "../hc-exact" }
+hc-cuts = { path = "../hc-cuts" }
 hc-lp = { path = "../hc-lp" }
 
 [dev-dependencies]

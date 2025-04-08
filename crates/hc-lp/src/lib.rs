@@ -40,4 +40,4 @@ pub use ratio::Step;
 pub use scale::Scaling;
 pub use simplex::{Effort, Options, Outcome, solve, solve_from};
 pub use sparse::{SparseVec, Workspace};
-pub use working::{Kind, Working};
+pub use working::{ExtraRow, Kind, Working};

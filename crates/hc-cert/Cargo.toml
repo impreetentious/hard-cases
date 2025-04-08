@@ -13,6 +13,7 @@ hc-lp = { path = "../hc-lp" }
 # The tree a certificate serializes is the tree the search built, in the order
 # it built it. Reading it here rather than rebuilding it is what keeps the
 # proof an account of what happened.
+hc-cuts = { path = "../hc-cuts" }
 hc-mip = { path = "../hc-mip" }
 # A certificate that begins with a reduction chain has to write the same rules
 # the reduction used, in the same encoding. Reading them from the chain rather
