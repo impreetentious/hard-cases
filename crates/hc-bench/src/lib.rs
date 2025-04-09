@@ -15,6 +15,7 @@
 
 pub mod campaign;
 pub mod corpus;
+pub mod cuts;
 pub mod exhaustive;
 pub mod proof;
 pub mod receipt;

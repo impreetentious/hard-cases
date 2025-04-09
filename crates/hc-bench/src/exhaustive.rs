@@ -116,6 +116,78 @@ pub fn best(model: &Model, cap: u64) -> Truth {
     }
 }
 
+/// Visits every feasible integer assignment in the model's box.
+///
+/// The same walk [`best`] makes, reporting each feasible point instead of
+/// keeping only the best one. A cut is a claim that some region holds no
+/// feasible integer point it excludes, and the only way to test that claim
+/// without believing anything the solver derived is to look at all of them.
+///
+/// `cap` bounds the product of the box sizes and is checked before the walk
+/// begins. Returns the reason when the model is outside what enumeration can
+/// reach, exactly as [`best`] does.
+///
+/// # Errors
+///
+/// Returns the reason the model cannot be enumerated.
+pub fn for_each_feasible(
+    model: &Model,
+    cap: u64,
+    mut visit: impl FnMut(&[Rational]),
+) -> Result<(), &'static str> {
+    let Some(boxes) = boxes_of(model, cap)? else {
+        // An empty box holds no points, which is a complete and correct answer
+        // to "visit every feasible one".
+        return Ok(());
+    };
+
+    let mut point: Vec<i64> = boxes.iter().map(|(first, _)| *first).collect();
+    loop {
+        let exact: Vec<Rational> = point
+            .iter()
+            .map(|value| Rational::from_i64(*value))
+            .collect();
+        if feasible(model, &exact) {
+            visit(&exact);
+        }
+        if !advance(&mut point, &boxes) {
+            return Ok(());
+        }
+    }
+}
+
+/// The integer box each variable ranges over, or why there is none.
+///
+/// `Ok(None)` means some variable's box is empty, so the model has no integer
+/// points at all.
+fn boxes_of(model: &Model, cap: u64) -> Result<Option<Vec<(i64, i64)>>, &'static str> {
+    let variables = model.variables();
+    let mut boxes: Vec<(i64, i64)> = Vec::with_capacity(variables.len());
+    let mut product = 1_u64;
+
+    for variable in variables {
+        if !variable.integral {
+            return Err("a variable is continuous");
+        }
+        let (Some(low), Some(high)) = (variable.lower.as_ref(), variable.upper.as_ref()) else {
+            return Err("an integer variable is unbounded");
+        };
+        let (Some(first), Some(last)) = (ceiling(low), floor(high)) else {
+            return Err("a bound does not fit in a machine word");
+        };
+        if first > last {
+            return Ok(None);
+        }
+        let width = (last - first + 1) as u64;
+        product = match product.checked_mul(width) {
+            Some(value) if value <= cap => value,
+            _ => return Err("the box product exceeds the cap"),
+        };
+        boxes.push((first, last));
+    }
+    Ok(Some(boxes))
+}
+
 /// Whether an assignment satisfies every row of the model, exactly.
 ///
 /// Bounds are not checked because the walk never leaves them.

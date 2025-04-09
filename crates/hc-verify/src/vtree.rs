@@ -929,6 +929,60 @@ mod tests {
         assert_eq!(refusal.code, Code::SCOPE_FORWARD);
     }
 
+    /// A spine of `count` branches, each splitting the one integer column.
+    ///
+    /// The children take the next two identifiers, left before right, so the
+    /// left child of one branch is the parent of the next and the tree is a
+    /// single path. Splitting at the same value every time is redundant and
+    /// legal: the replay is checking structure, and a nested region that
+    /// repeats its parent's assumption is still a region.
+    fn spine(count: u32) -> Vec<Step> {
+        let mut steps = Vec::with_capacity(count as usize + 1);
+        steps.push(root());
+        let mut parent = 0;
+        for index in 0..u64::from(count) {
+            let left = 2 * index + 1;
+            steps.push(Step::Branch {
+                parent,
+                variable: 0,
+                split: whole(2),
+                left,
+                right: 2 * index + 2,
+            });
+            parent = left;
+        }
+        steps
+    }
+
+    /// A legal proof may be deeper than the process call stack, and the replay
+    /// has to reach the bottom of it rather than crash on the way down.
+    ///
+    /// Nothing here asserts the tree is *good* — a spine with no terminal
+    /// records is an incomplete cover and is refused for that. What is being
+    /// established is that the refusal arrives as a rule, from a replay that
+    /// walked a hundred thousand levels iteratively. A recursive implementation
+    /// would never reach the verdict; it would take the process with it, and a
+    /// verifier that dies on a deep proof has rejected it for a reason with
+    /// nothing to do with mathematics.
+    #[test]
+    fn a_proof_as_deep_as_the_cap_is_answered_by_a_rule_and_not_a_crash() {
+        let refusal = run(spine(DEPTH_CAP), None)
+            .expect_err("a spine with no terminal records is not a cover");
+        assert_ne!(
+            refusal.code,
+            Code::TREE_DEPTH,
+            "a tree exactly at the cap is within it"
+        );
+    }
+
+    /// And one level past the cap is refused by the cap, not by exhaustion.
+    #[test]
+    fn a_proof_past_the_depth_cap_is_refused_by_the_cap() {
+        let refusal =
+            run(spine(DEPTH_CAP + 1), None).expect_err("the tree is deeper than the cap allows");
+        assert_eq!(refusal.code, Code::TREE_DEPTH);
+    }
+
     #[test]
     fn a_child_identifier_that_is_not_the_next_one_is_refused() {
         let refusal = run(

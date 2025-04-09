@@ -137,3 +137,48 @@ fn cutting_is_reproducible() {
     assert_eq!(first.tree, second.tree);
     assert_eq!(first.ending, Ending::Optimal);
 }
+
+#[test]
+fn cutting_pays_for_itself_in_nodes_without_weakening_the_answer() {
+    let mut generator = Xoshiro256PlusPlus::from_seed(0x0c07_0000_0000_0013);
+    let (mut plain_nodes, mut cut_nodes) = (0_u64, 0_u64);
+    let mut compared = 0;
+
+    for round in 0..400 {
+        let source = generate(&mut generator, 1 + (round % 2), 2 + (round % 3));
+        let model = read(source.as_bytes(), Form::Free).expect("the source parses");
+
+        let plain = run(&model, &with_cuts(0));
+        let cut = run(&model, &with_cuts(2));
+
+        // The answer first. A comparison of node counts between two searches
+        // that disagreed about the answer would be a measurement of nothing.
+        assert_eq!(
+            plain.ending, cut.ending,
+            "round {round}: cuts changed the status\n{source}"
+        );
+        assert_eq!(
+            plain
+                .incumbent
+                .as_ref()
+                .map(|found| found.objective.to_canonical_string()),
+            cut.incumbent
+                .as_ref()
+                .map(|found| found.objective.to_canonical_string()),
+            "round {round}: cuts changed the answer\n{source}"
+        );
+
+        plain_nodes += plain.opened;
+        cut_nodes += cut.opened;
+        compared += 1;
+    }
+
+    assert_eq!(compared, 400);
+    // Per instance a cut may cost more than it saves, and that is ordinary.
+    // Across the corpus it has to pay, or separation is work the search is
+    // doing for no reason at all.
+    assert!(
+        cut_nodes < plain_nodes,
+        "cuts opened {cut_nodes} nodes against {plain_nodes} without them, so separation is not paying"
+    );
+}

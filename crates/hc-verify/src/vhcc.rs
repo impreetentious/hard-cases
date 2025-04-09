@@ -1086,6 +1086,48 @@ mod tests {
     }
 
     #[test]
+    fn a_declared_byte_length_above_the_cap_is_refused_without_allocating() {
+        let mut stream = bytes();
+        stream[58..66].copy_from_slice(&u64::MAX.to_le_bytes());
+        let refusal = read(&reseal(stream), INSTANCE).expect_err("the cap must fire");
+        assert_eq!(refusal.code, Code::PARSE_DECLARED_TOO_LARGE);
+    }
+
+    /// A rational token that declares more bytes than the cap allows is
+    /// refused before the length is used for anything.
+    ///
+    /// The frozen vector's one multiplier is the text "1", written as the
+    /// length prefix `01` followed by `31`, at the end of the DualBound
+    /// record. Respelling that prefix as a three-byte variable-length integer
+    /// naming three hundred thousand is the smallest edit that reaches this
+    /// cap: the record grows by one byte, so its payload length and the
+    /// header's declared length both move with it, and the checksum is
+    /// recomputed. What arrives at the reader is a well-formed stream whose
+    /// only defect is a token nobody could afford to read.
+    #[test]
+    fn a_rational_token_above_the_cap_is_refused_without_allocating() {
+        const TOKEN: usize = 108;
+        let mut stream = bytes();
+        assert_eq!(
+            &stream[TOKEN..=TOKEN + 1],
+            &[0x01, 0x31],
+            "the multiplier token is not where the annotated vector says it is"
+        );
+
+        // 300_000 in the seven-bits-per-byte encoding, least significant group
+        // first, every group but the last carrying the continuation bit.
+        stream.splice(TOKEN..=TOKEN + 1, [0xE0, 0xA7, 0x12]);
+        // The DualBound payload grew by one byte, and so did the stream the
+        // header declares.
+        stream[104] += 1;
+        let declared = u64::from_le_bytes(stream[58..66].try_into().expect("eight bytes"));
+        stream[58..66].copy_from_slice(&(declared + 1).to_le_bytes());
+
+        let refusal = read(&reseal(stream), INSTANCE).expect_err("the cap must fire");
+        assert_eq!(refusal.code, Code::PARSE_RATIONAL_TOKEN);
+    }
+
+    #[test]
     fn a_declared_byte_length_that_disagrees_with_the_stream_is_refused() {
         let mut stream = bytes();
         stream[58..66].copy_from_slice(&99_u64.to_le_bytes());
