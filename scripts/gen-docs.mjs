@@ -231,6 +231,8 @@ for (const [file, asset] of assets) {
 const PAGES = {
   "canonical.toml": "canonical-model.md",
   "mps.toml": "mps.md",
+  "lp.toml": "lp-format.md",
+  "json.toml": "json-schema.md",
   "numeric.toml": "numeric-caps.md",
   "rng.toml": "determinism.md",
   "claims.toml": "claims.md",

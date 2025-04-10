@@ -15,6 +15,8 @@ fixtures.
 |---|---|---|
 | [Canonical exact model v1](canonical-model.md) | `spec/v1/canonical.toml` | How raw instance bytes become the exact model a proof is about, and how two parsers demonstrate they agree. |
 | [MPS acceptance v1](mps.md) | `spec/v1/mps.toml` | Accepted sections, bound types, the RANGES table, and the fixed-form field windows. |
+| [LP-format acceptance v1](lp-format.md) | `spec/v1/lp.toml` | The accepted LP-format subset: sections, statements, terms, bounds, and the reserved words. |
+| [JSON instance schema v1](json-schema.md) | `spec/v1/json.toml` | The accepted JSON document: its members, its restricted JSON grammar, and the rule that no model value is a number. |
 | [Numeric acceptance, caps, and budgets v1](numeric-caps.md) | `spec/v1/numeric.toml` | The acceptance fence every strict parser applies before allocating, and the absolute size, bit, and work caps a proof must fit inside. |
 | [Deterministic generation v1](determinism.md) | `spec/v1/rng.toml` | The digest-to-seed derivation, the two recurrences, and frozen state and output vectors. |
 | [Terminal claims v1](claims.md) | `spec/v1/claims.toml` | The closed terminal vocabulary, what each claim asserts, and the mechanical closure rule that decides it. |
