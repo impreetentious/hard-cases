@@ -33,6 +33,8 @@ pub mod vcut;
 pub mod vhash;
 pub mod vhcc;
 pub mod vint;
+pub mod vjson;
+pub mod vlp;
 pub mod vmodel;
 pub mod vparse;
 pub mod vpresolve;

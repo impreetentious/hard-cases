@@ -306,6 +306,12 @@ impl Builder {
             }
 
             if let Some(found) = opening(&token::keyword_shape(stripped)) {
+                // The statement above is finished before this line is judged,
+                // so a refusal always names the earliest line that carries a
+                // defect rather than the first check that happens to run.
+                if let Some(statement) = pending.take() {
+                    self.close(statement)?;
+                }
                 let part = match found {
                     Opening::Clean(part) => part,
                     Opening::Refused => {
@@ -323,9 +329,6 @@ impl Builder {
                         .at(line));
                     }
                 };
-                if let Some(statement) = pending.take() {
-                    self.close(statement)?;
-                }
                 self.open(part, line)?;
                 if part == Part::End {
                     self.ended = true;
@@ -867,6 +870,11 @@ impl Builder {
         line: usize,
         binary: bool,
     ) -> Result<(), Refusal> {
+        // The names are read before any of them is resolved. A line is lexed
+        // and then interpreted, never both at once: reporting a lookup failure
+        // from the first half of a line whose second half is not even a list
+        // of names would name a defect that is not the one the file has.
+        let mut listed = Vec::with_capacity(tokens.len());
         for item in tokens {
             let Token::Name(name) = item else {
                 return Err(Refusal::new(
@@ -875,6 +883,10 @@ impl Builder {
                 )
                 .at(line));
             };
+            listed.push(name);
+        }
+
+        for name in listed {
             if token::is_reserved(name) {
                 return Err(Refusal::new(
                     Rejection::INSTANCE_LP_GRAMMAR,

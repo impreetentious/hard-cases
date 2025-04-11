@@ -22,7 +22,7 @@ use crate::vrat::Frac;
 use crate::vreject::{Code, Rejected};
 
 /// The longest accepted input, in bytes.
-const MAX_FILE: usize = 268_435_456;
+pub(crate) const MAX_FILE: usize = 268_435_456;
 /// The largest accepted number of stored coefficients.
 const MAX_CELLS: usize = 10_000_000;
 /// The longest accepted name, in bytes.
@@ -148,12 +148,12 @@ struct ColumnSlot {
 /// fewer structure whose invariants a reader of this crate has to take on
 /// trust.
 #[derive(Default)]
-struct Names {
-    sorted: Vec<(String, usize)>,
+pub(crate) struct Names {
+    pub(crate) sorted: Vec<(String, usize)>,
 }
 
 impl Names {
-    fn find(&self, name: &str) -> Option<usize> {
+    pub(crate) fn find(&self, name: &str) -> Option<usize> {
         self.sorted
             .binary_search_by(|(known, _)| known.as_str().cmp(name))
             .ok()
@@ -161,7 +161,7 @@ impl Names {
     }
 
     /// Inserts a name, reporting whether it was already present.
-    fn insert(&mut self, name: &str, index: usize) -> bool {
+    pub(crate) fn insert(&mut self, name: &str, index: usize) -> bool {
         match self
             .sorted
             .binary_search_by(|(known, _)| known.as_str().cmp(name))
@@ -193,7 +193,7 @@ pub fn read(raw: &[u8], layout: Layout) -> Result<Instance, Rejected> {
 }
 
 /// Refuses input that is not ASCII text with line-feed endings.
-fn as_text(raw: &[u8]) -> Result<&str, Rejected> {
+pub(crate) fn as_text(raw: &[u8]) -> Result<&str, Rejected> {
     let mut at = 0usize;
     while at < raw.len() {
         let byte = raw[at];
@@ -954,7 +954,7 @@ fn bare(text: &str) -> &str {
     }
 }
 
-fn check_name(name: &str, at: usize) -> Result<(), Rejected> {
+pub(crate) fn check_name(name: &str, at: usize) -> Result<(), Rejected> {
     if name.len() > MAX_NAME {
         return Err(Rejected::new(
             Code::NAME_LENGTH,
@@ -965,7 +965,7 @@ fn check_name(name: &str, at: usize) -> Result<(), Rejected> {
     Ok(())
 }
 
-fn number(token: &str, at: usize) -> Result<Frac, Rejected> {
+pub(crate) fn number(token: &str, at: usize) -> Result<Frac, Rejected> {
     use crate::vtext::NumberError;
     match Frac::from_decimal_token(token, MAX_TOKEN, MAX_BITS) {
         Ok(value) => Ok(value),
@@ -980,7 +980,7 @@ fn number(token: &str, at: usize) -> Result<Frac, Rejected> {
     }
 }
 
-fn representable(value: &Frac, what: &str, at: usize) -> Result<(), Rejected> {
+pub(crate) fn representable(value: &Frac, what: &str, at: usize) -> Result<(), Rejected> {
     if value.inside_binary64() {
         return Ok(());
     }

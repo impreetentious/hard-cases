@@ -193,6 +193,9 @@ fn build(document: &Json, options: Options, digest: [u8; 32]) -> Result<Model, R
                 format!("two variables share the name {name:?}"),
             ));
         }
+        // The members are read in the order the schema declares them, so that
+        // a document with two defects is refused for the earlier one whichever
+        // reader is looking at it.
         let bound = |member: &str| -> Result<Option<Rational>, Refusal> {
             match optional(column, member, &what)? {
                 None => Ok(None),
@@ -203,6 +206,8 @@ fn build(document: &Json, options: Options, digest: [u8; 32]) -> Result<Model, R
                 }
             }
         };
+        let lower = bound("lb")?;
+        let upper = bound("ub")?;
         let integral = match column.member("integer") {
             Some(Json::Bool(flag)) => *flag,
             _ => {
@@ -214,8 +219,8 @@ fn build(document: &Json, options: Options, digest: [u8; 32]) -> Result<Model, R
         let written = limits.read_number(text(column, "obj", &what)?, 0)?;
         Limits::admit_value(&written, "an objective coefficient", 0)?;
         variables.push(Variable {
-            lower: bound("lb")?,
-            upper: bound("ub")?,
+            lower,
+            upper,
             integral,
             objective: if negate { written.neg() } else { written },
             name: name.to_owned(),
@@ -237,6 +242,7 @@ fn build(document: &Json, options: Options, digest: [u8; 32]) -> Result<Model, R
                 format!("two rows share the name {name:?}"),
             ));
         }
+        let sense = shape(text(row, "sense", &what)?)?;
         let base = limits.read_number(text(row, "rhs", &what)?, 0)?;
         Limits::admit_value(&base, "a right-hand side", 0)?;
         let range = match optional(row, "range", &what)? {
@@ -247,7 +253,7 @@ fn build(document: &Json, options: Options, digest: [u8; 32]) -> Result<Model, R
                 Some(value)
             }
         };
-        let (lower, upper) = sided(text(row, "sense", &what)?, &base, range.as_ref())?;
+        let (lower, upper) = sided(sense, &base, range.as_ref());
         rows.push(Row {
             lower,
             upper,
@@ -319,42 +325,56 @@ fn build(document: &Json, options: Options, digest: [u8; 32]) -> Result<Model, R
     }))
 }
 
+/// How a row was written.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    AtMost,
+    AtLeast,
+    Exactly,
+}
+
+/// Reads a row sense.
+fn shape(sense: &str) -> Result<Shape, Refusal> {
+    match sense {
+        "L" => Ok(Shape::AtMost),
+        "G" => Ok(Shape::AtLeast),
+        "E" => Ok(Shape::Exactly),
+        other => Err(refuse(format!(
+            "the row sense {other:?} is outside the accepted set"
+        ))),
+    }
+}
+
 /// Turns a row sense, a right-hand side, and a range into the two sides.
 ///
 /// The table is the one the MPS reader applies, deliberately and to the
 /// character. Two formats that widen a row differently would make a model
 /// depend on which of them a caller happened to write it in.
 fn sided(
-    sense: &str,
+    sense: Shape,
     base: &Rational,
     range: Option<&Rational>,
-) -> Result<(Option<Rational>, Option<Rational>), Refusal> {
+) -> (Option<Rational>, Option<Rational>) {
     let Some(range) = range else {
         return match sense {
-            "L" => Ok((None, Some(base.clone()))),
-            "G" => Ok((Some(base.clone()), None)),
-            "E" => Ok((Some(base.clone()), Some(base.clone()))),
-            other => Err(refuse(format!(
-                "the row sense {other:?} is outside the accepted set"
-            ))),
+            Shape::AtMost => (None, Some(base.clone())),
+            Shape::AtLeast => (Some(base.clone()), None),
+            Shape::Exactly => (Some(base.clone()), Some(base.clone())),
         };
     };
     let magnitude = range.abs();
     match sense {
-        "L" => Ok((Some(base.sub(&magnitude)), Some(base.clone()))),
-        "G" => Ok((Some(base.clone()), Some(base.add(&magnitude)))),
-        "E" => {
+        Shape::AtMost => (Some(base.sub(&magnitude)), Some(base.clone())),
+        Shape::AtLeast => (Some(base.clone()), Some(base.add(&magnitude))),
+        Shape::Exactly => {
             if range.is_negative() {
-                Ok((Some(base.add(range)), Some(base.clone())))
+                (Some(base.add(range)), Some(base.clone()))
             } else {
                 // A zero range on an equality row is a no-op rather than an
                 // error. It says nothing and is permitted to say nothing.
-                Ok((Some(base.clone()), Some(base.add(range))))
+                (Some(base.clone()), Some(base.add(range)))
             }
         }
-        other => Err(refuse(format!(
-            "the row sense {other:?} is outside the accepted set"
-        ))),
     }
 }
 
