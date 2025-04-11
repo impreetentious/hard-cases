@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "sense": "min",
+  "objective_constant": "-5",
+  "vars": [
+    {
+      "name": "X",
+      "lb": "0",
+      "ub": "2.5",
+      "integer": false,
+      "obj": "0.1"
+    },
+    {
+      "name": "Y",
+      "lb": "0",
+      "ub": "1",
+      "integer": true,
+      "obj": "-2.5"
+    }
+  ],
+  "rows": [
+    {
+      "name": "R1",
+      "sense": "G",
+      "rhs": "1",
+      "range": null
+    },
+    {
+      "name": "R2",
+      "sense": "E",
+      "rhs": "300",
+      "range": null
+    }
+  ],
+  "nonzeros": [
+    [
+      0,
+      0,
+      "3"
+    ],
+    [
+      0,
+      0,
+      "-3"
+    ],
+    [
+      0,
+      1,
+      "1.25"
+    ],
+    [
+      0,
+      1,
+      "0.75"
+    ],
+    [
+      1,
+      0,
+      "1.5e2"
+    ]
+  ]
+}

@@ -1,0 +1,120 @@
+# JSON instance vectors, version 1.
+#
+# Every entry names a document and what both strict readers must do with it. An
+# accepted document names the canonical dump both must emit byte for byte; a
+# rejected one names the single identifier both must produce. The negative half
+# is the more important half: an accepted document shows that a reader works,
+# and a rejected one shows that a check exists at all.
+
+[meta]
+version = 1
+title = 'JSON instance vectors v1'
+summary = 'JSON documents paired with expected canonical dumps or expected rejection identifiers.'
+format_tag = 4
+note = 'The three accepted documents carry the same three models the LP vectors carry, so their dumps agree below the format and digest lines. A model written in one format and rewritten in another is the same model, and that is checked as bytes rather than asserted.'
+
+# ---------------------------------------------------------------------------
+# Accepted
+# ---------------------------------------------------------------------------
+
+[accept.tiny]
+file = 'tiny.json'
+canon = 'tiny.canon'
+digest = 'd38fb19e52d8dae15343082be211221f2dcbc38acaaf97e1d3be8e5afd404421'
+covers = 'The smallest complete document: one integer variable with both bounds, one inequality row with no range, and one coefficient.'
+
+[accept.ranges]
+file = 'ranges.json'
+canon = 'ranges.canon'
+digest = 'f51e1a082af6b905454ec0d3c2a1b0f5e72f24a7d83087670353c065fcba5679'
+covers = 'The range member on rows of two senses, a maximizing document, a variable unbounded on both sides spelled as two nulls, and a negative lower bound.'
+assertions = ['a range widens a row by the table the MPS reader applies', 'a maximizing document is negated at the parse boundary and the original direction is recorded', 'an absent bound is the member spelled null, never a missing member']
+trap = 'trap_json_range_matches_mps'
+
+[accept.exact]
+file = 'exact.json'
+canon = 'exact.canon'
+digest = '9e7f2aea51092e6c83f95f222b8c214e74308e66060aa2fae9c22c0d7dbdf10e'
+covers = 'Decimal text a float round trip would corrupt, a scientific-notation coefficient in a string, coefficient entries that sum, entries that cancel to zero, and an objective constant.'
+assertions = ['0.1 becomes 1/10 and not the nearest binary64', 'the string 1.5e2 becomes the integer 150', 'the cancelling pair leaves a zerosum note rather than nothing']
+
+# ---------------------------------------------------------------------------
+# Rejected
+# ---------------------------------------------------------------------------
+
+[reject.float_value]
+file = 'reject/float-value.json'
+id = 'HC-INSTANCE-28'
+covers = 'An objective coefficient written as a JSON number. This is the rule the whole schema rests on, and it is enforced by the grammar rather than by a check somewhere later.'
+trap = 'trap_json_value_is_never_a_number'
+
+[reject.unknown_member]
+file = 'reject/unknown-member.json'
+id = 'HC-INSTANCE-28'
+covers = 'A member the schema does not name. Ignoring what is not understood is how a model acquires a meaning nobody wrote.'
+trap = 'trap_json_unknown_member'
+
+[reject.missing_member]
+file = 'reject/missing-member.json'
+id = 'HC-INSTANCE-28'
+covers = 'A document with no objective constant. There are no optional members; a default would be a second reading of the same document.'
+
+[reject.duplicate_member]
+file = 'reject/duplicate-member.json'
+id = 'HC-INSTANCE-28'
+covers = 'One object naming a member twice. Readers resolve this by position and they do not agree which position wins.'
+
+[reject.index_out_of_range]
+file = 'reject/index-out-of-range.json'
+id = 'HC-INSTANCE-28'
+covers = 'A coefficient naming a column past the end of the variable array.'
+
+[reject.free_row_sense]
+file = 'reject/free-row-sense.json'
+id = 'HC-INSTANCE-28'
+covers = 'A free row. The objective lives on the columns here, so a free row is a row with no meaning.'
+
+[reject.wrong_version]
+file = 'reject/wrong-version.json'
+id = 'HC-INSTANCE-28'
+covers = 'A document stating a schema version this reader does not implement. It is refused rather than read hopefully.'
+
+[reject.no_variables]
+file = 'reject/no-variables.json'
+id = 'HC-INSTANCE-28'
+covers = 'A document with no columns, which has nothing to solve and nothing to prove.'
+
+[reject.trailing_comma]
+file = 'reject/trailing-comma.json'
+id = 'HC-INSTANCE-28'
+covers = 'A trailing comma, which is the difference between two JSON dialects and would make an empty element possible.'
+
+[reject.unicode_escape]
+file = 'reject/unicode-escape.json'
+id = 'HC-INSTANCE-28'
+covers = 'A four-digit escape. Every accepted input is ASCII, so an escape is either redundant or names something outside the accepted set.'
+
+[reject.duplicate_variable_name]
+file = 'reject/duplicate-variable-name.json'
+id = 'HC-INSTANCE-15'
+covers = 'Two variables sharing a label.'
+
+[reject.duplicate_row_name]
+file = 'reject/duplicate-row-name.json'
+id = 'HC-INSTANCE-14'
+covers = 'Two rows sharing a label.'
+
+[reject.long_name]
+file = 'reject/long-name.json'
+id = 'HC-INSTANCE-03'
+covers = 'A name past the length every accepted format caps names at. The cap is shared, so the identifier is too.'
+
+[reject.bad_number]
+file = 'reject/bad-number.json'
+id = 'HC-INSTANCE-07'
+covers = 'A decimal string spelling not-a-number. The string is not a licence to write something that is not a number in it.'
+
+[reject.underflow_value]
+file = 'reject/underflow-value.json'
+id = 'HC-INSTANCE-06'
+covers = 'An exact nonzero coefficient that rounds to zero in binary64. The search would run on a model with a structural zero where the proof has a nonzero.'

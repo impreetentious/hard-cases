@@ -1,0 +1,33 @@
+hc-canonical 1
+format 4
+digest f51e1a082af6b905454ec0d3c2a1b0f5e72f24a7d83087670353c065fcba5679
+sense min original=max
+objconst 0
+counts vars=3 rows=4 nonzeros=8 ineqs=11
+var 0 C 0 6 -2 a
+var 1 C * * -3 b
+var 2 C -1 9 1 c
+row 0 1 5 r1
+row 1 -2 8 r2
+row 2 3 3 r3
+row 3 -4 * r4
+nz 0 0 1
+nz 0 1 2
+nz 0 2 1
+nz 1 0 1
+nz 1 2 1
+nz 2 1 -1
+nz 2 2 1
+nz 2 3 1
+ineq 0 row 0 lower
+ineq 1 row 0 upper
+ineq 2 row 1 lower
+ineq 3 row 1 upper
+ineq 4 row 2 lower
+ineq 5 row 2 upper
+ineq 6 row 3 lower
+ineq 7 var 0 lower
+ineq 8 var 0 upper
+ineq 9 var 2 lower
+ineq 10 var 2 upper
+end

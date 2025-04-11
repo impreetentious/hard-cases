@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "sense": "min",
+  "objective_constant": "0",
+  "vars": [
+    {
+      "name": "x",
+      "lb": "0",
+      "ub": "10",
+      "integer": true,
+      "obj": "-1"
+    }
+  ],
+  "rows": [
+    {
+      "name": "c1",
+      "sense": "L",
+      "rhs": "4",
+      "range": null
+    },
+    {
+      "name": "c1",
+      "sense": "L",
+      "rhs": "5",
+      "range": null
+    }
+  ],
+  "nonzeros": [
+    [
+      0,
+      0,
+      "1"
+    ]
+  ]
+}
