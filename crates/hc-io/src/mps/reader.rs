@@ -21,9 +21,10 @@ use hc_core::{
 };
 use hc_exact::Rational;
 
-use crate::mps::numeric::Limits;
 use crate::mps::record::{Fields, Form, Line, Record, Shape, classify};
 use crate::mps::section::{Section, Sequence, read_sense};
+use crate::numeric::Limits;
+use crate::text::admit_text;
 
 /// How to read a file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,33 +105,6 @@ pub fn read_with(raw: &[u8], options: Options) -> Result<Parsed, Refusal> {
     let text = admit_text(raw)?;
     let digest = instance_digest(options.tag().byte(), raw);
     Builder::new(options, digest).run(text)
-}
-
-/// Refuses input that is not ASCII text with line-feed endings.
-///
-/// The restriction is derived rather than chosen. The canonical dump is ASCII
-/// and writes names into it verbatim, so a name that cannot appear in the dump
-/// cannot appear in a model. And a file with carriage returns is a different
-/// byte sequence, hence a different instance under the digest; accepting both
-/// and normalizing would make two digests produce one model.
-fn admit_text(raw: &[u8]) -> Result<&str, Refusal> {
-    for (offset, &byte) in raw.iter().enumerate() {
-        let acceptable = byte == b'\n' || byte == b'\t' || (b' '..=b'~').contains(&byte);
-        if !acceptable {
-            return Err(Refusal::new(
-                Rejection::INSTANCE_NOT_TEXT,
-                format!("byte {byte:#04x} at offset {offset} is not accepted input"),
-            ));
-        }
-    }
-    // Every byte is ASCII, so this cannot fail; the conversion is written as a
-    // fallible one anyway rather than through an unchecked call.
-    core::str::from_utf8(raw).map_err(|error| {
-        Refusal::new(
-            Rejection::INSTANCE_NOT_TEXT,
-            format!("input is not text: {error}"),
-        )
-    })
 }
 
 /// How a row was declared.

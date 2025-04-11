@@ -1,0 +1,116 @@
+# LP-format vectors, version 1.
+#
+# Every entry names an instance file and what both strict parsers must do with
+# it. An accepted file names the canonical dump both must emit byte for byte; a
+# rejected file names the single identifier both must produce. The negative half
+# is the more important half: an accepted-file vector shows that a parser works,
+# and a rejected-file vector shows that a check exists at all.
+
+[meta]
+version = 1
+title = 'LP-format parser vectors v1'
+summary = 'LP files paired with expected canonical dumps or expected rejection identifiers.'
+format_tag = 3
+note = 'The dump of exact.lp is identical to the dump of the MPS vector of the same name below the format and digest lines. That is not a coincidence and it is not free: it is the property a round trip between two formats has to have, and it is checked as bytes.'
+
+# ---------------------------------------------------------------------------
+# Accepted
+# ---------------------------------------------------------------------------
+
+[accept.tiny]
+file = 'tiny.lp'
+canon = 'tiny.canon'
+digest = '80f00a89f7fe60a028a8fdcbfff226bb155908e82bfb03514d3c6b225a7957da'
+covers = 'The smallest complete instance: a labelled objective with a term carrying a sign and no coefficient, one row, a bound statement, and an integrality section.'
+
+[accept.ranges]
+file = 'ranges.lp'
+canon = 'ranges.canon'
+digest = 'e99b3babb24ab9106150cb30aec78b73929156956626a0f71f23dce949a83e3d'
+covers = 'Two-sided rows written in both directions, an equality row, a one-sided row with a negative right-hand side, a maximizing objective, the word that removes both bounds, and a two-sided bound whose lower side is negative.'
+assertions = ['the two-sided forms assign the same row bounds whichever direction they are written in', 'a maximizing objective is negated at the parse boundary and the original direction is recorded', 'a negative upper bound is accepted once the lower bound has been given']
+trap = 'trap_lp_double_sided_row'
+
+[accept.exact]
+file = 'exact.lp'
+canon = 'exact.canon'
+digest = 'e44aff69051f89e20799e67b36a0a7dd5b201aeea76fc31983213cbaade4d866'
+covers = 'Decimal text a float round trip would corrupt, a scientific-notation coefficient, terms that sum, terms that cancel to zero, an objective constant, a statement continued across two lines, and a binary section.'
+assertions = ['0.1 becomes 1/10 and not the nearest binary64', '1.5e2 becomes the integer 150', 'the cancelling pair leaves a zerosum note rather than nothing', 'the continuation line is part of the statement above it and not a new one']
+trap = 'trap_lp_statement_continuation'
+
+# ---------------------------------------------------------------------------
+# Rejected
+# ---------------------------------------------------------------------------
+
+[reject.missing_label]
+file = 'reject/missing-label.lp'
+id = 'HC-INSTANCE-27'
+covers = 'A constraint with no label. The label is what makes the continuation rule total, so a file without one is a file whose statement boundaries are a guess.'
+
+[reject.constant_in_constraint]
+file = 'reject/constant-in-constraint.lp'
+id = 'HC-INSTANCE-27'
+covers = 'A bare number inside the linear form of a constraint. Moving it across the operator is arithmetic on behalf of an author who did not write it.'
+
+[reject.reserved_word_as_name]
+file = 'reject/reserved-word-as-name.lp'
+id = 'HC-INSTANCE-27'
+covers = 'A term naming a variable called free. Admitting it would make a bound statement ambiguous.'
+trap = 'trap_lp_reserved_word_as_name'
+
+[reject.negative_upper_default_lower]
+file = 'reject/negative-upper-default-lower.lp'
+id = 'HC-INSTANCE-19'
+covers = 'A negative upper bound on a variable still at the default lower bound of zero. Readers disagree about whether it opens the lower side, and the two readings differ on which points are feasible. This is the same fork the MPS reader refuses, reached through a different grammar.'
+trap = 'trap_lp_default_bounds'
+
+[reject.duplicate_constraint_label]
+file = 'reject/duplicate-constraint-label.lp'
+id = 'HC-INSTANCE-14'
+covers = 'Two constraints sharing a label, which makes every later reference to it ambiguous.'
+
+[reject.bound_on_undeclared]
+file = 'reject/bound-on-undeclared.lp'
+id = 'HC-INSTANCE-13'
+covers = 'A bound naming a variable no term declared. Variables are declared by use, so this states something about a column that is not in the model.'
+
+[reject.duplicate_bound]
+file = 'reject/duplicate-bound.lp'
+id = 'HC-INSTANCE-24'
+covers = 'Two statements setting the same side of one variable.'
+
+[reject.bounded_binary]
+file = 'reject/bounded-binary.lp'
+id = 'HC-INSTANCE-24'
+covers = 'A variable bounded by a statement and then listed as binary. The section sets both sides, so the file makes the same claim twice and a reader would have to decide which wins.'
+
+[reject.section_out_of_order]
+file = 'reject/section-out-of-order.lp'
+id = 'HC-INSTANCE-09'
+covers = 'The bound section before the constraint section. Bounds refer back to variables terms declared, so the order is not decoration.'
+
+[reject.unknown_section]
+file = 'reject/unknown-section.lp'
+id = 'HC-INSTANCE-08'
+covers = 'A semicontinuous section. It is named rather than left to fall through to the statement grammar, because a file carrying one is not a file this subset misread.'
+
+[reject.missing_end]
+file = 'reject/missing-end.lp'
+id = 'HC-INSTANCE-26'
+covers = 'Input ending before the terminator, which is what a truncated download looks like.'
+
+[reject.three_operator_row]
+file = 'reject/three-operator-row.lp'
+id = 'HC-INSTANCE-27'
+covers = 'A chain of three relational operators. A constraint carries one or two.'
+
+[reject.two_signs]
+file = 'reject/two-signs.lp'
+id = 'HC-INSTANCE-27'
+covers = 'A plus followed by a minus. Combining them is arithmetic the file is asking the reader to perform.'
+
+[reject.unsigned_infinity]
+file = 'reject/unsigned-infinity.lp'
+id = 'HC-INSTANCE-27'
+covers = 'An infinity spelling with no sign. The sign says which side of the line the endpoint is on without the reader having to work it out from the operator.'
