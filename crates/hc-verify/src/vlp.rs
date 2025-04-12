@@ -103,13 +103,6 @@ fn reserved(word: &str) -> bool {
         )
 }
 
-/// One logical line: the section it belongs to, where it started, its text.
-struct Logical {
-    part: Part,
-    at: usize,
-    text: String,
-}
-
 /// Reads an LP-format file.
 ///
 /// # Errors
@@ -124,155 +117,338 @@ pub fn read(raw: &[u8]) -> Result<Instance, Rejected> {
     }
     let text = as_text(raw)?;
     let digest = crate::vhash::instance_digest(Tag::Lp.byte(), raw);
-    // The cut reports a structural defect by handing it back rather than by
-    // returning: every statement it gathered began on an earlier line than the
-    // defect did, so the statements are interpreted first and the structural
-    // refusal is reported only when they are all sound. A refusal names the
-    // earliest line carrying a defect, never the first check that ran.
-    let (lines, written, structural) = cut(text);
-    let instance = assemble(&lines, written, digest)?;
-    match structural {
-        Some(refusal) => Err(refusal),
-        None => Ok(instance),
-    }
+    let mut reader = Reader::new();
+    reader.walk(text)?;
+    reader.close(digest)
 }
 
-/// The first walk: comments away, keywords recognised, statements gathered.
+/// A column being built.
+struct Slot {
+    name: String,
+    whole: bool,
+    cost: Frac,
+    low: Option<Frac>,
+    high: Option<Frac>,
+    low_default: bool,
+    fixed_low: bool,
+    fixed_high: bool,
+    listed: bool,
+}
+
+/// The reader.
 ///
-/// A structural defect stops the walk and is returned beside what was gathered
-/// before it, because a statement that began earlier is refused earlier.
-fn cut(text: &str) -> (Vec<Logical>, Direction, Option<Rejected>) {
-    let mut out: Vec<Logical> = Vec::new();
-    let mut part: Option<Part> = None;
-    let mut seen = [false; 6];
-    let mut rank = 0usize;
-    let mut stopped = false;
-    let mut written = Direction::Min;
-    let mut carrying = false;
-
-    for (offset, whole) in text.lines().enumerate() {
-        let at = offset + 1;
-        let body = match whole.find('\\') {
-            Some(cut) => whole[..cut].trim(),
-            None => whole.trim(),
-        };
-        if body.is_empty() {
-            continue;
-        }
-
-        let shape = collapse(body);
-        if unsupported(&shape) {
-            return (
-                out,
-                written,
-                Some(
-                    Rejected::new(
-                        Code::UNKNOWN_SECTION,
-                        format!("{body:?} is a section this subset does not accept"),
-                    )
-                    .on_line(at),
-                ),
-            );
-        }
-        if let Some(found) = opens(&shape) {
-            let (opened, direction) = match found {
-                Ok(pair) => pair,
-                Err(refusal) => return (out, written, Some(refusal.on_line(at))),
-            };
-            if seen[opened.rank()] {
-                let refusal = Rejected::new(
-                    Code::SECTION_ORDER,
-                    format!("{} appears twice", opened.word()),
-                )
-                .on_line(at);
-                return (out, written, Some(refusal));
-            }
-            if opened.rank() < rank {
-                let refusal = Rejected::new(
-                    Code::SECTION_ORDER,
-                    format!("{} appears out of order", opened.word()),
-                )
-                .on_line(at);
-                return (out, written, Some(refusal));
-            }
-            seen[opened.rank()] = true;
-            rank = opened.rank();
-            if let Some(direction) = direction {
-                written = direction;
-            }
-            part = Some(opened);
-            carrying = false;
-            if opened == Part::Stop {
-                stopped = true;
-                break;
-            }
-            continue;
-        }
-
-        let Some(inside) = part else {
-            let refusal = Rejected::new(
-                Code::LP_GRAMMAR,
-                "content appears before any section".to_owned(),
-            )
-            .on_line(at);
-            return (out, written, Some(refusal));
-        };
-
-        match inside {
-            Part::Objective | Part::Rows => {
-                if labelled(body) {
-                    out.push(Logical {
-                        part: inside,
-                        at,
-                        text: body.to_owned(),
-                    });
-                    carrying = true;
-                } else {
-                    if !carrying {
-                        let refusal = Rejected::new(
-                            Code::LP_GRAMMAR,
-                            "a statement begins without a label".to_owned(),
-                        )
-                        .on_line(at);
-                        return (out, written, Some(refusal));
-                    }
-                    let last = out.last_mut().expect("carrying implies a statement");
-                    last.text.push(' ');
-                    last.text.push_str(body);
-                }
-            }
-            _ => out.push(Logical {
-                part: inside,
-                at,
-                text: body.to_owned(),
-            }),
-        }
-    }
-
-    if !stopped {
-        let refusal = Rejected::new(
-            Code::UNEXPECTED_END,
-            "input ends before the terminator".to_owned(),
-        );
-        return (out, written, Some(refusal));
-    }
-    for (rank, part) in [(0, Part::Objective), (1, Part::Rows)] {
-        if !seen[rank] {
-            let refusal =
-                Rejected::new(Code::SECTION_MISSING, format!("{} is missing", part.word()));
-            return (out, written, Some(refusal));
-        }
-    }
-    (out, written, None)
+/// One walk, not two. Each line is lexed as it arrives and each statement is
+/// interpreted when it closes, which is the order the whole grammar is defined
+/// in: a character that begins no token makes its line unreadable whatever the
+/// statement above it was going to say, and a statement is not judged until
+/// the reader has seen all of it. The counterpart reader is arranged
+/// completely differently and follows the same two sentences.
+struct Reader {
+    columns: Vec<Slot>,
+    column_names: Names,
+    rows: Vec<Constraint>,
+    row_names: Names,
+    cells: Vec<(u32, u32, Frac, u32)>,
+    constant: Frac,
+    written: Direction,
+    part: Option<Part>,
+    seen: [bool; 6],
+    rank: usize,
+    stopped: bool,
+    /// The statement being gathered: where it began, and its text so far.
+    pending: Option<(usize, String)>,
 }
+
+impl Reader {
+    fn new() -> Self {
+        Self {
+            columns: Vec::new(),
+            column_names: Names::default(),
+            rows: Vec::new(),
+            row_names: Names::default(),
+            cells: Vec::new(),
+            constant: Frac::zero(),
+            written: Direction::Min,
+            part: None,
+            seen: [false; 6],
+            rank: 0,
+            stopped: false,
+            pending: None,
+        }
+    }
+
+    fn walk(&mut self, text: &str) -> Result<(), Rejected> {
+        for (offset, whole) in text.lines().enumerate() {
+            let at = offset + 1;
+            let body = match whole.find('\\') {
+                Some(cut) => whole[..cut].trim(),
+                None => whole.trim(),
+            };
+            if body.is_empty() {
+                continue;
+            }
+
+            let shape = collapse(body);
+            if unsupported(&shape) {
+                self.finish_pending()?;
+                return Err(Rejected::new(
+                    Code::UNKNOWN_SECTION,
+                    format!("{body:?} is a section this subset does not accept"),
+                )
+                .on_line(at));
+            }
+            if let Some(found) = opens(&shape) {
+                // The statement above is finished before this line is judged,
+                // so a refusal names the earliest line carrying a defect
+                // rather than the first check that happens to run.
+                self.finish_pending()?;
+                let (opened, direction) = match found {
+                    Ok(pair) => pair,
+                    Err(refusal) => return Err(refusal.on_line(at)),
+                };
+                self.open(opened, direction, at)?;
+                if opened == Part::Stop {
+                    self.stopped = true;
+                    return Ok(());
+                }
+                continue;
+            }
+
+            let Some(inside) = self.part else {
+                return Err(Rejected::new(
+                    Code::LP_GRAMMAR,
+                    "content appears before any section".to_owned(),
+                )
+                .on_line(at));
+            };
+
+            // Lexed here, before anything decides what the line means. Whether
+            // a run of characters is a name or a number is a property of the
+            // run, not of the statement it turns out to be in.
+            lex(body, at)?;
+            match inside {
+                Part::Objective | Part::Rows => {
+                    if labelled(body) {
+                        self.finish_pending()?;
+                        self.pending = Some((at, body.to_owned()));
+                    } else {
+                        let Some(gathering) = self.pending.as_mut() else {
+                            return Err(Rejected::new(
+                                Code::LP_GRAMMAR,
+                                "a statement begins without a label".to_owned(),
+                            )
+                            .on_line(at));
+                        };
+                        gathering.1.push(' ');
+                        gathering.1.push_str(body);
+                    }
+                }
+                Part::Bounds => {
+                    let mut cursor = Cursor::over(body);
+                    bound(&mut cursor, at, &mut self.columns, &self.column_names)?;
+                }
+                Part::Whole | Part::Zeroone => {
+                    let mut cursor = Cursor::over(body);
+                    integral(
+                        &mut cursor,
+                        at,
+                        &mut self.columns,
+                        &self.column_names,
+                        inside == Part::Zeroone,
+                    )?;
+                }
+                Part::Stop => unreachable!("the terminator ends the walk"),
+            }
+        }
+        self.finish_pending()
+    }
+
+    /// Opens a section, checking its order and that it has not appeared before.
+    fn open(
+        &mut self,
+        opened: Part,
+        direction: Option<Direction>,
+        at: usize,
+    ) -> Result<(), Rejected> {
+        if self.seen[opened.rank()] {
+            return Err(Rejected::new(
+                Code::SECTION_ORDER,
+                format!("{} appears twice", opened.word()),
+            )
+            .on_line(at));
+        }
+        if opened.rank() < self.rank {
+            return Err(Rejected::new(
+                Code::SECTION_ORDER,
+                format!("{} appears out of order", opened.word()),
+            )
+            .on_line(at));
+        }
+        self.seen[opened.rank()] = true;
+        self.rank = opened.rank();
+        if let Some(direction) = direction {
+            self.written = direction;
+        }
+        self.part = Some(opened);
+        Ok(())
+    }
+
+    /// Interprets the statement being gathered, if there is one.
+    fn finish_pending(&mut self) -> Result<(), Rejected> {
+        let Some((at, text)) = self.pending.take() else {
+            return Ok(());
+        };
+        let mut cursor = Cursor::over(&text);
+        let name = label(&mut cursor, at)?;
+        match self.part {
+            Some(Part::Objective) => {
+                let form = linear(
+                    &mut cursor,
+                    at,
+                    &mut self.columns,
+                    &mut self.column_names,
+                    true,
+                )?;
+                if !cursor.done() {
+                    return Err(grammar(
+                        "the objective statement does not end where it should",
+                        at,
+                    ));
+                }
+                for (column, value) in form.terms {
+                    self.columns[column].cost = self.columns[column].cost.plus(&value);
+                }
+                self.constant = self.constant.plus(&form.constant);
+                Ok(())
+            }
+            Some(Part::Rows) => {
+                let (low, high, terms) =
+                    row(&mut cursor, at, &mut self.columns, &mut self.column_names)?;
+                let index = self.rows.len();
+                if !self.row_names.insert(name, index) {
+                    return Err(Rejected::new(
+                        Code::DUPLICATE_ROW,
+                        format!("two constraints share the label {name:?}"),
+                    )
+                    .on_line(at));
+                }
+                self.rows.push(Constraint {
+                    low,
+                    high,
+                    name: name.to_owned(),
+                });
+                for (column, value) in terms {
+                    self.store(column, index, value, at)?;
+                }
+                Ok(())
+            }
+            _ => unreachable!("statements are gathered only in those two sections"),
+        }
+    }
+
+    /// Adds one coefficient, summing it where the position already carries one.
+    fn store(&mut self, column: usize, row: usize, value: Frac, at: usize) -> Result<(), Rejected> {
+        let position = (column as u32, row as u32);
+        match self
+            .cells
+            .iter_mut()
+            .find(|entry| (entry.0, entry.1) == position)
+        {
+            Some(entry) => {
+                entry.2 = entry.2.plus(&value);
+                entry.3 += 1;
+            }
+            None => {
+                if self.cells.len() >= MAX_CELLS {
+                    return Err(Rejected::new(
+                        Code::TOO_MANY_NONZEROS,
+                        "too many stored coefficients".to_owned(),
+                    )
+                    .on_line(at));
+                }
+                self.cells.push((position.0, position.1, value, 1));
+            }
+        }
+        Ok(())
+    }
+
+    /// Assembles the instance, once the file has been read to its end.
+    fn close(mut self, digest: [u8; 32]) -> Result<Instance, Rejected> {
+        if !self.stopped {
+            return Err(Rejected::new(
+                Code::UNEXPECTED_END,
+                "input ends before the terminator".to_owned(),
+            ));
+        }
+        for (rank, part) in [(0, Part::Objective), (1, Part::Rows)] {
+            if !self.seen[rank] {
+                return Err(Rejected::new(
+                    Code::SECTION_MISSING,
+                    format!("{} is missing", part.word()),
+                ));
+            }
+        }
+
+        let flip = self.written == Direction::Max;
+        let built = self
+            .columns
+            .iter()
+            .map(|slot| Column {
+                low: slot.low.clone(),
+                high: slot.high.clone(),
+                whole: slot.whole,
+                cost: if flip {
+                    slot.cost.negated()
+                } else {
+                    slot.cost.clone()
+                },
+                name: slot.name.clone(),
+            })
+            .collect();
+
+        self.cells.sort_by_key(|entry| (entry.0, entry.1));
+        let mut cells = Vec::new();
+        let mut cancelled = Vec::new();
+        for (column, row, value, contributions) in self.cells {
+            if value.is_zero() {
+                if contributions > 1 {
+                    cancelled.push((column, row));
+                }
+                continue;
+            }
+            cells.push(Cell { column, row, value });
+        }
+
+        Ok(Instance {
+            tag: Tag::Lp,
+            digest,
+            written: self.written,
+            constant: if flip {
+                self.constant.negated()
+            } else {
+                self.constant
+            },
+            columns: built,
+            rows: self.rows,
+            cells,
+            cancelled,
+            dropped: Vec::new(),
+        })
+    }
+}
+
+/// The largest accepted number of stored coefficients.
+const MAX_CELLS: usize = 10_000_000;
 
 /// Whether a shape opens a section, and whether it does so cleanly.
+///
+/// A keyword sharing its line with content would put the reader back in the
+/// business of guessing where statements begin, so it is refused rather than
+/// read as a header and a statement.
 fn opens(shape: &str) -> Option<Result<(Part, Option<Direction>), Rejected>> {
     if let Some(found) = keyword(shape) {
         return Some(Ok(found));
     }
-    // A keyword sharing its line with content would put the reader back in the
-    // business of guessing where statements begin.
     let head = shape.split(' ').next().unwrap_or("");
     let pair = shape.splitn(3, ' ').take(2).collect::<Vec<_>>().join(" ");
     for candidate in [head, pair.as_str()] {
@@ -288,6 +464,40 @@ fn opens(shape: &str) -> Option<Result<(Part, Option<Direction>), Rejected>> {
     None
 }
 
+/// Refuses a line no lexer can read, and holds its numbers to their fences.
+///
+/// Two passes over the same line, in the order the fences are defined: a
+/// character that begins no token is refused wherever it is, and only then is
+/// each numeric token read. A line with both defects is refused for the
+/// character, because that is what stops the line being a line.
+fn lex(text: &str, at: usize) -> Result<(), Rejected> {
+    let mut cursor = Cursor::over(text);
+    let mut numbers = Vec::new();
+    while !cursor.done() {
+        if cursor.byte(b':') || cursor.sign().is_some() || cursor.relation().is_some() {
+            continue;
+        }
+        if cursor.word().is_some() {
+            continue;
+        }
+        if let Some(token) = cursor.digits() {
+            numbers.push(token);
+            continue;
+        }
+        return Err(grammar("a character begins no token", at));
+    }
+    for token in numbers {
+        number(token, at)?;
+    }
+    Ok(())
+}
+
+/// Whether a line opens a statement rather than continuing one.
+fn labelled(body: &str) -> bool {
+    let mut cursor = Cursor::over(body);
+    cursor.word().is_some() && cursor.byte(b':')
+}
+
 /// Upper-cases a line and collapses its runs of blanks.
 fn collapse(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
@@ -298,12 +508,6 @@ fn collapse(line: &str) -> String {
         out.push_str(&word.to_ascii_uppercase());
     }
     out
-}
-
-/// Whether a line opens a statement rather than continuing one.
-fn labelled(body: &str) -> bool {
-    let mut cursor = Cursor::over(body);
-    cursor.word().is_some() && cursor.byte(b':')
 }
 
 /// A predictive cursor over one logical line.
@@ -439,139 +643,6 @@ impl<'a> Cursor<'a> {
             _ => None,
         }
     }
-}
-
-/// A column being built.
-struct Slot {
-    name: String,
-    whole: bool,
-    cost: Frac,
-    low: Option<Frac>,
-    high: Option<Frac>,
-    low_default: bool,
-    fixed_low: bool,
-    fixed_high: bool,
-    listed: bool,
-}
-
-/// The second walk: logical lines into the instance they describe.
-fn assemble(lines: &[Logical], written: Direction, digest: [u8; 32]) -> Result<Instance, Rejected> {
-    let mut columns: Vec<Slot> = Vec::new();
-    let mut column_names = Names::default();
-    let mut rows: Vec<Constraint> = Vec::new();
-    let mut row_names = Names::default();
-    let mut cells: Vec<(u32, u32, Frac, u32)> = Vec::new();
-    let mut constant = Frac::zero();
-
-    for logical in lines {
-        let at = logical.at;
-        let mut cursor = Cursor::over(&logical.text);
-        match logical.part {
-            Part::Objective => {
-                label(&mut cursor, at)?;
-                let form = linear(&mut cursor, at, &mut columns, &mut column_names, true)?;
-                if !cursor.done() {
-                    return Err(grammar(
-                        "the objective statement does not end where it should",
-                        at,
-                    ));
-                }
-                for (column, value) in form.terms {
-                    columns[column].cost = columns[column].cost.plus(&value);
-                }
-                constant = constant.plus(&form.constant);
-            }
-            Part::Rows => {
-                let name = label(&mut cursor, at)?;
-                let (low, high, terms) = row(&mut cursor, at, &mut columns, &mut column_names)?;
-                let index = rows.len();
-                if !row_names.insert(name, index) {
-                    return Err(Rejected::new(
-                        Code::DUPLICATE_ROW,
-                        format!("two constraints share the label {name:?}"),
-                    )
-                    .on_line(at));
-                }
-                rows.push(Constraint {
-                    low,
-                    high,
-                    name: name.to_owned(),
-                });
-                for (column, value) in terms {
-                    let position = (column as u32, index as u32);
-                    match cells
-                        .iter_mut()
-                        .find(|entry| (entry.0, entry.1) == position)
-                    {
-                        Some(entry) => {
-                            entry.2 = entry.2.plus(&value);
-                            entry.3 += 1;
-                        }
-                        None => {
-                            if cells.len() >= 10_000_000 {
-                                return Err(Rejected::new(
-                                    Code::TOO_MANY_NONZEROS,
-                                    "too many stored coefficients".to_owned(),
-                                )
-                                .on_line(at));
-                            }
-                            cells.push((position.0, position.1, value, 1));
-                        }
-                    }
-                }
-            }
-            Part::Bounds => bound(&mut cursor, at, &mut columns, &column_names)?,
-            Part::Whole | Part::Zeroone => whole(
-                &mut cursor,
-                at,
-                &mut columns,
-                &column_names,
-                logical.part == Part::Zeroone,
-            )?,
-            Part::Stop => unreachable!("the terminator ends the first walk"),
-        }
-    }
-
-    let flip = written == Direction::Max;
-    let built = columns
-        .iter()
-        .map(|slot| Column {
-            low: slot.low.clone(),
-            high: slot.high.clone(),
-            whole: slot.whole,
-            cost: if flip {
-                slot.cost.negated()
-            } else {
-                slot.cost.clone()
-            },
-            name: slot.name.clone(),
-        })
-        .collect();
-
-    cells.sort_by_key(|entry| (entry.0, entry.1));
-    let mut kept = Vec::new();
-    let mut cancelled = Vec::new();
-    for (column, row, value, contributions) in cells {
-        if value.is_zero() {
-            if contributions > 1 {
-                cancelled.push((column, row));
-            }
-            continue;
-        }
-        kept.push(Cell { column, row, value });
-    }
-
-    Ok(Instance {
-        tag: Tag::Lp,
-        digest,
-        written,
-        constant: if flip { constant.negated() } else { constant },
-        columns: built,
-        rows,
-        cells: kept,
-        cancelled,
-        dropped: Vec::new(),
-    })
 }
 
 fn grammar(detail: &str, at: usize) -> Rejected {
@@ -982,7 +1053,7 @@ fn skip_to_relation(cursor: &mut Cursor<'_>) -> Option<(Rel, usize)> {
 /// the whole line unreadable, and reporting a lookup failure from the first
 /// half of a line whose second half is not even a list of names would name a
 /// defect that is not the one the file has.
-fn whole(
+fn integral(
     cursor: &mut Cursor<'_>,
     at: usize,
     columns: &mut [Slot],

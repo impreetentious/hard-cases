@@ -346,7 +346,7 @@ impl Builder {
                     .at(line));
                 }
                 Some(Part::Objective(_) | Part::Constraints) => {
-                    let tokens = token::tokens(stripped, line)?;
+                    let tokens = self.lexed(stripped, line)?;
                     if labelled(&tokens) {
                         if let Some(statement) = pending.take() {
                             self.close(statement)?;
@@ -366,11 +366,11 @@ impl Builder {
                     }
                 }
                 Some(Part::Bounds) => {
-                    let tokens = token::tokens(stripped, line)?;
+                    let tokens = self.lexed(stripped, line)?;
                     self.bound(&tokens, line)?;
                 }
                 Some(part @ (Part::General | Part::Binary)) => {
-                    let tokens = token::tokens(stripped, line)?;
+                    let tokens = self.lexed(stripped, line)?;
                     self.integrality(&tokens, line, part == Part::Binary)?;
                 }
                 Some(Part::End) => unreachable!("the terminator ends the walk"),
@@ -381,6 +381,23 @@ impl Builder {
             self.close(statement)?;
         }
         self.finish()
+    }
+
+    /// Splits a line into tokens and holds every numeric token to its fences.
+    ///
+    /// Whether a run of characters is a number is a property of the run, not of
+    /// the statement it turns out to be in, so it is settled here with the rest
+    /// of the lexing. A statement whose shape is also wrong is refused for the
+    /// number, because the number is the earlier defect: it is detectable at
+    /// the token, and the shape only at the end of the statement.
+    fn lexed<'a>(&self, line: &'a str, at: usize) -> Result<Vec<Token<'a>>, Refusal> {
+        let tokens = token::tokens(line, at)?;
+        for item in &tokens {
+            if let Token::Number(text) = item {
+                self.options.limits.read_number(text, at)?;
+            }
+        }
+        Ok(tokens)
     }
 
     /// Opens a section, checking its order and that it has not appeared before.

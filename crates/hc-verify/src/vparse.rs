@@ -295,6 +295,14 @@ impl Reader {
                 continue;
             }
 
+            // The fixed-form windows are a property of the line, so they are
+            // checked for every record before anything decides what the line
+            // means — before the section that would read its fields, and
+            // before the question of whether a section is open at all. A line
+            // is lexed and then interpreted, never both at once.
+            if self.layout == Layout::Fixed {
+                self.windows(line, line_number)?;
+            }
             let Some(open) = part else {
                 return Err(Rejected::new(
                     Code::SECTION_MISSING,
@@ -357,27 +365,33 @@ impl Reader {
     ///
     /// `leads` says whether the first role is an indicator code, which is what
     /// the free form needs in order to know where the names start.
+    /// Refuses a fixed-form record whose content leaves its windows.
+    fn windows(&self, line: &str, at: usize) -> Result<(), Rejected> {
+        for &(from, to) in &GAPS {
+            let gap = slice(line, from, to);
+            if !gap.is_empty() {
+                return Err(Rejected::new(
+                    Code::FIELD_OVERRUN,
+                    format!("content in columns {from} to {to}: {gap:?}"),
+                )
+                .on_line(at));
+            }
+        }
+        let tail = slice(line, 62, usize::MAX);
+        if !tail.is_empty() {
+            return Err(Rejected::new(
+                Code::FIELD_OVERRUN,
+                format!("content past column 61: {tail:?}"),
+            )
+            .on_line(at));
+        }
+        Ok(())
+    }
+
     fn roles<'a>(&self, line: &'a str, leads: bool, at: usize) -> Result<[&'a str; 6], Rejected> {
         match self.layout {
             Layout::Fixed => {
-                for &(from, to) in &GAPS {
-                    let gap = slice(line, from, to);
-                    if !gap.is_empty() {
-                        return Err(Rejected::new(
-                            Code::FIELD_OVERRUN,
-                            format!("content in columns {from} to {to}: {gap:?}"),
-                        )
-                        .on_line(at));
-                    }
-                }
-                let tail = slice(line, 62, usize::MAX);
-                if !tail.is_empty() {
-                    return Err(Rejected::new(
-                        Code::FIELD_OVERRUN,
-                        format!("content past column 61: {tail:?}"),
-                    )
-                    .on_line(at));
-                }
+                self.windows(line, at)?;
                 let mut out = [""; 6];
                 for (slot, &(from, to)) in out.iter_mut().zip(&FIELDS) {
                     *slot = slice(line, from, to);

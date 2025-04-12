@@ -1,0 +1,31 @@
+[package]
+name = "hc-fuzz"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
+hc-io = { path = "../hc-io" }
+# The whole point of the parser targets is that two implementations answer the
+# same question separately. The edge runs one way, as it does everywhere: a
+# caller may use the verifier's public interface, and the verifier may use
+# nothing.
+hc-verify = { path = "../hc-verify" }
+# The proof target needs a real certificate before it can damage one.
+hc-cert = { path = "../hc-cert" }
+hc-lp = { path = "../hc-lp" }
+hc-mip = { path = "../hc-mip" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+# A host crate. It catches panics, prints, and reads a clock to report how long
+# a budget took; none of that may happen inside the deterministic perimeter,
+# and the scan that keeps it out names this crate as a host.
+disallowed_types = "allow"

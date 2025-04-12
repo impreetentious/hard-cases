@@ -174,6 +174,21 @@ model is refused rather than approximated, and the JSON schema — which quotes
 names and carries every value as text — is the one that can usually still take
 it.
 
+## What the fuzzing establishes, and what it does not
+
+The fuzz corpus is generated from seeds rather than grown from coverage
+feedback, so every case is a function of its seed and reproduces anywhere by
+running that seed. What it checks is that no reader panics, that the two
+independent readers agree on every input — the same canonical dump where both
+accept, the same identifier where both refuse — that one drafted model rendered
+in all four accepted readings produces one model, and that a damaged certificate
+is answered with a verdict or an identifier rather than a crash.
+
+**There is no coverage feedback.** The corpus reaches what its generators were
+written to reach. A region of a reader that nobody thought to emit for is a
+region nobody is fuzzing, and no counter here will report that. The decision and
+what it buys are recorded in ADR-0017.
+
 ## What the receipt publishes
 
 `./scripts/receipt.sh` measures the trusted base at the moment it runs: the
