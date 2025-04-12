@@ -67,11 +67,18 @@ struct Stated {
     gap: Option<Frac>,
 }
 
-/// The layout a format tag names.
-fn layout_of(tag: u8) -> Result<Layout, Rejected> {
+/// Reads the original file under the rules its format tag names.
+///
+/// The tag is in the instance digest, so it is not a hint about how to read
+/// the file: it is part of what the certificate is a claim about. A tag naming
+/// a format this crate cannot read is refused rather than guessed at, because
+/// a proof about a file nobody here can parse has not been checked.
+fn read_by_tag(tag: u8, instance: &[u8]) -> Result<Instance, Rejected> {
     match tag {
-        1 => Ok(Layout::Fixed),
-        2 => Ok(Layout::Free),
+        1 => read_instance(instance, Layout::Fixed),
+        2 => read_instance(instance, Layout::Free),
+        3 => crate::vlp::read(instance),
+        4 => crate::vjson::read(instance),
         other => Err(Rejected::new(
             Code::PARSE_NOT_THIS_INSTANCE,
             format!("format tag {other} names a format this crate does not read"),
@@ -108,8 +115,7 @@ pub fn verify(certificate: &[u8], instance: &[u8]) -> Result<Verdict, Rejected> 
     work.read(instance.len() as u64);
 
     let proof = crate::vhcc::read(certificate, instance)?;
-    let layout = layout_of(proof.tag)?;
-    let model = read_instance(instance, layout)?;
+    let model = read_by_tag(proof.tag, instance)?;
     close(&mut work, &proof, &model)
 }
 

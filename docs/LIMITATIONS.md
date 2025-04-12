@@ -142,6 +142,38 @@ At most one named vector is accepted in each of the right-hand-side, ranges, and
 bounds sections. Repeated records under that one name are ordinary; a second
 distinct name is refused rather than silently chosen between.
 
+The LP-format subset is narrower than the files in the world. **Every objective
+and every constraint carries a label**, and a line that does not begin with one
+continues the statement above it; that is what makes the continuation rule
+total, and it refuses files whose constraints were relying on a generated name
+nobody wrote down. A constant inside a constraint is refused rather than moved
+across the operator. A one-sided bound names its variable first, so `0 <= x` has
+to be written `x >= 0`. An infinity spelling is a bound endpoint and nothing
+else: in a coefficient or a right-hand side it is a malformed number, so there
+is one numeric grammar across all three formats rather than one with a local
+exception. The semicontinuous, special-ordered-set, indicator, and quadratic
+sections are named and refused rather than ignored.
+
+The JSON schema has no optional members and no floating-point literals. Absence
+is spelled `null`; a member that is simply missing is refused, because a default
+is a second reading of the same document. **No model value is a JSON number** —
+coefficients, bounds, right-hand sides, ranges, and the objective constant are
+all decimal strings, because a JSON number is a binary64 in nearly every reader
+and a value that has passed through one is not the value the document wrote.
+
+The format is named on the command line and never guessed, from the content or
+from the file name. It is part of the instance digest, so the same bytes read
+under two formats are two instances, and a heuristic there would make the
+identity of a model depend on a guess.
+
+The writers refuse what they cannot spell exactly. A name carrying whitespace
+has no free-form MPS spelling and no LP spelling; a coefficient whose
+denominator carries a prime other than two or five has no finite decimal
+expansion, and there is no rounding available on a path a proof is about. Such a
+model is refused rather than approximated, and the JSON schema — which quotes
+names and carries every value as text — is the one that can usually still take
+it.
+
 ## What the receipt publishes
 
 `./scripts/receipt.sh` measures the trusted base at the moment it runs: the

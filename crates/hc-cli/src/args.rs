@@ -5,6 +5,50 @@
 //! missing operand quietly defaulted is how a tool ends up appearing to have
 //! done more than it did.
 
+/// Which format's rules an instance file is read under.
+///
+/// Named on the command line, never guessed from the content or the file name.
+/// The format tag is inside the instance digest, so a file read under the
+/// wrong rules is a different instance, and a heuristic here would make the
+/// identity of a model depend on a guess.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Shape {
+    /// MPS read from its column windows.
+    #[default]
+    MpsFixed,
+    /// MPS with whitespace-delimited fields.
+    MpsFree,
+    /// The accepted LP-format subset.
+    Lp,
+    /// The JSON instance schema.
+    Json,
+}
+
+impl Shape {
+    /// The spelling the command line uses.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MpsFixed => "mps-fixed",
+            Self::MpsFree => "mps-free",
+            Self::Lp => "lp",
+            Self::Json => "json",
+        }
+    }
+
+    /// The format a word names.
+    #[must_use]
+    pub fn named(word: &str) -> Option<Self> {
+        match word {
+            "mps-fixed" => Some(Self::MpsFixed),
+            "mps-free" => Some(Self::MpsFree),
+            "lp" => Some(Self::Lp),
+            "json" => Some(Self::Json),
+            _ => None,
+        }
+    }
+}
+
 /// What the command line was asked to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
@@ -26,6 +70,8 @@ pub enum Command {
         simple_branching: bool,
         /// Whether to separate cuts.
         cuts: bool,
+        /// Which format's rules the instance is read under.
+        shape: Shape,
     },
     /// Recheck a certificate against an instance.
     Verify {
@@ -38,11 +84,15 @@ pub enum Command {
     Check {
         /// The instance file.
         instance: String,
+        /// Which format's rules the instance is read under.
+        shape: Shape,
     },
     /// Solve an instance and print the proof its certificate contains.
     Explain {
         /// The instance file.
         instance: String,
+        /// Which format's rules the instance is read under.
+        shape: Shape,
     },
     /// Print the trust-boundary receipt for a verifier source tree.
     Receipt {
@@ -56,13 +106,19 @@ pub enum Command {
 /// The usage text.
 pub const USAGE: &str = "\
 usage:
-  hc solve <instance> [--cert <file>] [--no-cert] [--dual] [--no-presolve]
-                      [--solution <file>] [--branching simple] [--no-cuts]
+  hc solve <instance> [--format <name>] [--cert <file>] [--no-cert] [--dual]
+                      [--no-presolve] [--solution <file>] [--branching simple]
+                      [--no-cuts]
   hc verify <certificate> --instance <file>
-  hc check <instance>
-  hc explain <instance>
+  hc check <instance> [--format <name>]
+  hc explain <instance> [--format <name>]
   hc receipt [<verifier crate directory>]
   hc --version
+
+formats mps-fixed (the default), mps-free, lp, json. The format is named, never
+        guessed: it is part of the instance digest, so the same bytes read two
+        ways are two instances. verify takes none, because the certificate
+        states which format its claim is about.
 
 solve   reads an instance, solves it, rebuilds the result exactly, and has the
         independent verifier recheck the certificate before reporting a status.
@@ -90,18 +146,28 @@ pub fn parse(arguments: &[String]) -> Option<Command> {
             [root] if !root.starts_with('-') => Some(Command::Receipt { root: root.clone() }),
             _ => None,
         },
-        "explain" => match rest {
-            [instance] if !instance.starts_with('-') => Some(Command::Explain {
-                instance: instance.clone(),
-            }),
-            _ => None,
-        },
-        "check" => match rest {
-            [instance] if !instance.starts_with('-') => Some(Command::Check {
-                instance: instance.clone(),
-            }),
-            _ => None,
-        },
+        "explain" => {
+            let (instance, shape) = one_file(rest)?;
+            Some(Command::Explain { instance, shape })
+        }
+        "check" => {
+            let (instance, shape) = one_file(rest)?;
+            Some(Command::Check { instance, shape })
+        }
+        _ => None,
+    }
+}
+
+/// Reads a subcommand that takes one instance file and an optional format.
+fn one_file(arguments: &[String]) -> Option<(String, Shape)> {
+    match arguments {
+        [instance] if !instance.starts_with('-') => Some((instance.clone(), Shape::default())),
+        [instance, flag, word] if !instance.starts_with('-') && flag == "--format" => {
+            Some((instance.clone(), Shape::named(word)?))
+        }
+        [flag, word, instance] if !instance.starts_with('-') && flag == "--format" => {
+            Some((instance.clone(), Shape::named(word)?))
+        }
         _ => None,
     }
 }
@@ -115,6 +181,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
     let mut solution = None;
     let mut simple_branching = false;
     let mut cuts = true;
+    let mut shape = None;
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
@@ -152,6 +219,13 @@ fn solve(arguments: &[String]) -> Option<Command> {
                 }
                 cuts = false;
                 index += 1;
+            }
+            "--format" => {
+                if shape.is_some() {
+                    return None;
+                }
+                shape = Some(Shape::named(arguments.get(index + 1)?)?);
+                index += 2;
             }
             "--solution" => {
                 if solution.is_some() {
@@ -193,6 +267,7 @@ fn solve(arguments: &[String]) -> Option<Command> {
         solution,
         simple_branching,
         cuts,
+        shape: shape.unwrap_or_default(),
     })
 }
 
@@ -244,6 +319,7 @@ mod tests {
                 solution: None,
                 simple_branching: false,
                 cuts: true,
+                shape: Shape::MpsFixed,
             })
         );
         assert_eq!(
@@ -257,6 +333,7 @@ mod tests {
                 solution: None,
                 simple_branching: false,
                 cuts: true,
+                shape: Shape::MpsFixed,
             })
         );
     }
@@ -274,6 +351,7 @@ mod tests {
                 solution: None,
                 simple_branching: false,
                 cuts: true,
+                shape: Shape::MpsFixed,
             })
         );
         assert_eq!(parse(&words(&["solve", "m.mps", "--dual", "--dual"])), None);
@@ -300,6 +378,7 @@ mod tests {
                 solution: Some("start.txt".to_owned()),
                 simple_branching: true,
                 cuts: true,
+                shape: Shape::MpsFixed,
             })
         );
         assert_eq!(parse(&words(&["solve", "m.mps", "--branching"])), None);
@@ -324,6 +403,7 @@ mod tests {
                 solution: None,
                 simple_branching: false,
                 cuts: true,
+                shape: Shape::MpsFixed,
             })
         );
         assert_eq!(
@@ -368,11 +448,62 @@ mod tests {
         assert_eq!(
             parse(&words(&["explain", "m.mps"])),
             Some(Command::Explain {
-                instance: "m.mps".to_owned()
+                instance: "m.mps".to_owned(),
+                shape: Shape::MpsFixed,
             })
         );
         assert_eq!(parse(&words(&["explain"])), None);
         assert_eq!(parse(&words(&["explain", "m.mps", "--tree"])), None);
+    }
+
+    #[test]
+    fn a_format_is_named_and_never_guessed() {
+        // Every subcommand that reads an instance takes the same names, and
+        // the flag may stand on either side of the file.
+        for (word, shape) in [
+            ("mps-fixed", Shape::MpsFixed),
+            ("mps-free", Shape::MpsFree),
+            ("lp", Shape::Lp),
+            ("json", Shape::Json),
+        ] {
+            assert_eq!(
+                parse(&words(&["check", "m.txt", "--format", word])),
+                Some(Command::Check {
+                    instance: "m.txt".to_owned(),
+                    shape,
+                })
+            );
+            assert_eq!(
+                parse(&words(&["explain", "--format", word, "m.txt"])),
+                Some(Command::Explain {
+                    instance: "m.txt".to_owned(),
+                    shape,
+                })
+            );
+            let Some(Command::Solve { shape: found, .. }) =
+                parse(&words(&["solve", "m.txt", "--format", word]))
+            else {
+                panic!("solve did not take --format {word}");
+            };
+            assert_eq!(found, shape);
+            assert_eq!(Shape::named(word), Some(shape));
+            assert_eq!(shape.as_str(), word);
+        }
+
+        // A format nobody implements, a flag with no name after it, and the
+        // same flag twice are all misuse rather than a default.
+        assert_eq!(
+            parse(&words(&["check", "m.txt", "--format", "cplex"])),
+            None
+        );
+        assert_eq!(parse(&words(&["check", "m.txt", "--format"])), None);
+        assert_eq!(
+            parse(&words(&[
+                "solve", "m.txt", "--format", "lp", "--format", "lp"
+            ])),
+            None
+        );
+        assert_eq!(parse(&words(&["verify", "c.hcc", "--format", "lp"])), None);
     }
 
     #[test]

@@ -34,18 +34,18 @@ fn main() -> ExitCode {
             print!("{}", hc_bench::receipt::of(&directory).render());
             code(Ending::Fine)
         }
-        Command::Explain { instance } => match slurp(&instance) {
+        Command::Explain { instance, shape } => match slurp(&instance) {
             Err(ending) => code(ending),
             Ok(bytes) => {
-                let (out, ending) = run::explain(&instance, &bytes);
+                let (out, ending) = run::explain(&instance, &bytes, shape);
                 print!("{out}");
                 code(ending)
             }
         },
-        Command::Check { instance } => match slurp(&instance) {
+        Command::Check { instance, shape } => match slurp(&instance) {
             Err(ending) => code(ending),
             Ok(bytes) => {
-                let (out, ending) = run::check(&bytes);
+                let (out, ending) = run::check(&bytes, shape);
                 print!("{out}");
                 code(ending)
             }
@@ -70,6 +70,7 @@ fn main() -> ExitCode {
             solution,
             simple_branching,
             cuts,
+            shape,
         } => {
             let Ok(bytes) = slurp(&instance) else {
                 return code(Ending::Misused);
@@ -94,6 +95,7 @@ fn main() -> ExitCode {
                 solution: start,
                 simple_branching,
                 cuts,
+                shape,
             };
             let solved = match run::search(&bytes, &settings) {
                 Ok(solved) => solved,

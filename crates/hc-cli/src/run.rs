@@ -16,12 +16,15 @@ use hc_cert::explain::tree;
 use hc_cert::mip::{assemble_mip, assemble_presolved};
 use hc_core::{Model, Tol};
 use hc_io::mps::{Form, read};
+use hc_io::{json, lp};
 use hc_lp::dual::solve_from as solve_dual;
 use hc_lp::{Basis, Effort, Options, Outcome, Problem, Working, solve};
 use hc_mip::branching::Branching;
 use hc_mip::search::{Options as MipOptions, run as search_tree};
 use hc_presolve::{Chain, reduce};
 use hc_verify::vcli::{accepted, refused};
+
+use crate::args::Shape;
 use hc_verify::vclose::verify;
 
 /// How a run ended, for the process exit code.
@@ -35,19 +38,27 @@ pub enum Ending {
     Misused,
 }
 
-/// Reads and canonicalizes an instance.
+/// Reads and canonicalizes an instance under the named format's rules.
 ///
 /// # Errors
 ///
 /// Returns the message to print when the file is not a readable instance.
-pub fn parse_instance(raw: &[u8]) -> Result<Model, String> {
-    read(raw, Form::Fixed).map_err(|refusal| format!("{refusal}"))
+pub fn parse_instance(raw: &[u8], shape: Shape) -> Result<Model, String> {
+    let parsed = match shape {
+        Shape::MpsFixed => read(raw, Form::Fixed),
+        Shape::MpsFree => read(raw, Form::Free),
+        Shape::Lp => lp::read(raw),
+        Shape::Json => json::read(raw),
+    };
+    // The format is named in the refusal, because the commonest way to be
+    // refused is to have read a perfectly good file under the wrong rules.
+    parsed.map_err(|refusal| format!("{refusal} (read as {})", shape.as_str()))
 }
 
 /// `hc check`: the canonical form and nothing else.
 #[must_use]
-pub fn check(raw: &[u8]) -> (String, Ending) {
-    match parse_instance(raw) {
+pub fn check(raw: &[u8], shape: Shape) -> (String, Ending) {
+    match parse_instance(raw, shape) {
         Ok(model) => (model.canonical_dump(), Ending::Fine),
         Err(message) => (format!("REFUSED: {message}\n"), Ending::Refused),
     }
@@ -66,6 +77,8 @@ pub struct Settings {
     pub simple_branching: bool,
     /// Whether to separate cuts.
     pub cuts: bool,
+    /// Which format's rules the instance is read under.
+    pub shape: Shape,
 }
 
 /// Reads a solution file: one exact decimal value per line, in variable order.
@@ -118,7 +131,7 @@ pub struct Solved {
 ///
 /// Returns the message to print when the file is not a readable instance.
 pub fn search(raw: &[u8], settings: &Settings) -> Result<Solved, String> {
-    let model = parse_instance(raw)?;
+    let model = parse_instance(raw, settings.shape)?;
     let chain = settings.presolve.then(|| reduce(&model));
     let reduced = chain.as_ref().map_or(&model, |chain| &chain.reduced);
 
@@ -293,8 +306,8 @@ pub fn certify(
 /// it is rendered only after the verifier has accepted it. An explanation of a
 /// proof nobody checked would be an explanation of a hypothesis.
 #[must_use]
-pub fn explain(instance_name: &str, raw: &[u8]) -> (String, Ending) {
-    let model = match parse_instance(raw) {
+pub fn explain(instance_name: &str, raw: &[u8], shape: Shape) -> (String, Ending) {
+    let model = match parse_instance(raw, shape) {
         Ok(model) => model,
         Err(message) => return (format!("REFUSED: {message}\n"), Ending::Refused),
     };
@@ -351,7 +364,7 @@ mod tests {
 
     #[test]
     fn checking_an_instance_prints_its_canonical_form() {
-        let (out, ending) = check(TINY);
+        let (out, ending) = check(TINY, Shape::MpsFixed);
         assert_eq!(ending, Ending::Fine);
         assert!(out.starts_with("hc-canonical 1\n"));
         assert!(out.ends_with("end\n"));
@@ -359,7 +372,7 @@ mod tests {
 
     #[test]
     fn an_unreadable_instance_is_refused_rather_than_guessed_at() {
-        let (out, ending) = check(b"this is not an instance file\n");
+        let (out, ending) = check(b"this is not an instance file\n", Shape::MpsFixed);
         assert_eq!(ending, Ending::Refused);
         assert!(out.starts_with("REFUSED: "));
     }
@@ -481,7 +494,7 @@ mod tests {
 
     #[test]
     fn explaining_an_instance_draws_a_tree_the_verifier_accepted() {
-        let (out, ending) = explain("tiny.mps", TINY);
+        let (out, ending) = explain("tiny.mps", TINY, Shape::MpsFixed);
         assert_eq!(ending, Ending::Fine);
         assert!(out.starts_with("node 0  "));
         assert!(out.contains("claim: optimal"));
@@ -491,7 +504,7 @@ mod tests {
 
     #[test]
     fn explaining_something_that_is_not_an_instance_refuses() {
-        let (out, ending) = explain("junk", b"not an instance\n");
+        let (out, ending) = explain("junk", b"not an instance\n", Shape::MpsFixed);
         assert_eq!(ending, Ending::Refused);
         assert!(out.starts_with("REFUSED: "));
     }

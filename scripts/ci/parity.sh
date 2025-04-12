@@ -38,19 +38,28 @@ done
 
 # One instance per terminal shape the linear-program calculus can reach, so a
 # regression in any one of them fails here rather than in whichever happens to
-# be exercised first.
+# be exercised first — and then the same exercise in each of the other two
+# accepted formats, because the format tag is inside the instance digest and a
+# certificate about a file in one of them is a different theorem.
 instances=(
-  instances/local/transport33.mps
-  instances/local/blend4.mps
-  instances/local/infeasible4.mps
-  instances/local/unbounded3.mps
-  spec/v1/vectors/mps/tiny.mps
+  "instances/local/transport33.mps mps-fixed"
+  "instances/local/blend4.mps mps-fixed"
+  "instances/local/infeasible4.mps mps-fixed"
+  "instances/local/unbounded3.mps mps-fixed"
+  "spec/v1/vectors/mps/tiny.mps mps-fixed"
+  "spec/v1/vectors/lp/tiny.lp lp"
+  "spec/v1/vectors/lp/ranges.lp lp"
+  "spec/v1/vectors/json/tiny.json json"
+  "spec/v1/vectors/json/ranges.json json"
 )
 
 checked=0
-for instance in "${instances[@]}"; do
-  certificate="$work/$(basename "$instance" .mps).hcc"
-  "$hc" solve "$instance" --cert "$certificate" > "$work/solve.out"
+for entry in "${instances[@]}"; do
+  set -- $entry
+  instance="$1"
+  format="$2"
+  certificate="$work/$(basename "${instance%.*}").$format.hcc"
+  "$hc" solve "$instance" --format "$format" --cert "$certificate" > "$work/solve.out"
 
   if [[ ! -s "$certificate" ]]; then
     echo "parity: FAILED — solving $instance produced no certificate"
@@ -79,7 +88,7 @@ done
 # the exit code must say so. A verifier that says no and exits zero has not
 # said no to anything that reads exit codes.
 victim="$work/tamper.hcc"
-cp "$work/transport33.hcc" "$victim"
+cp "$work/transport33.mps-fixed.hcc" "$victim"
 python3 - "$victim" <<'PY'
 import sys
 
