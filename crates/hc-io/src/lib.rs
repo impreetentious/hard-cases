@@ -25,5 +25,6 @@ pub mod lp;
 pub mod mps;
 pub mod numeric;
 mod text;
+pub mod write;
 
 pub use numeric::Limits;
