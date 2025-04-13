@@ -1,0 +1,90 @@
+# A whole trace, by hand, in hexadecimal.
+#
+# The run is the solve of vectors/mps/tiny.mps with no presolve:
+#
+#   minimize  -x
+#   subject to      x <= 4
+#             0 <=  x <= 10,  x integer
+#
+# The relaxation is integral at the root, so there is nothing to branch on and
+# nothing to cut: one linear solve, one incumbent, and a frontier that was
+# already closed when certification began. It is the shortest trace a solved
+# instance can have, which is what makes it the right one to freeze — every
+# field below is present because the schema says it is, not because the run was
+# complicated enough to need it.
+#
+# The counters are the ones that run actually reported: one simplex iteration,
+# a certificate of 160 bytes, and 473 verifier work units. The floats are the
+# search's own binary64 values and the exact values are canonical rational
+# text, which is the distinction the whole schema is built around.
+#
+# Every byte is annotated. Whitespace and comment lines are not part of the
+# vector; strip them and the remaining 66 bytes are the file.
+
+# --- header, 5 bytes ------------------------------------------------------
+
+48 43 54 31              # magic, "HCT1"
+01                       # schema version 1
+
+# --- the root relaxation, 10 bytes ----------------------------------------
+
+01                       # root_lp
+01                       # one simplex iteration
+00 00 00 00 00 00 10 c0  # objective -4.0, binary64, little endian
+
+# --- the root node, 4 bytes -----------------------------------------------
+
+02                       # node_open
+00                       # node 0
+00                       # parent 0: the root is its own parent
+00                       # depth 0
+
+# --- the root node solved, 11 bytes ---------------------------------------
+
+03                       # node_solved
+00                       # node 0
+01                       # one iteration
+00 00 00 00 00 00 10 c0  # objective -4.0, still a float and still not a bound
+
+# --- the relaxation was integral, 5 bytes ---------------------------------
+
+06                       # node_integral
+00                       # node 0
+02                       # the objective text is two bytes
+2d 34                    # "-4", exact, as a certificate would cite it
+
+# --- the incumbent, 6 bytes -----------------------------------------------
+
+09                       # incumbent
+02 2d 34                 # objective "-4", exact
+04                       # source 4: "node", the fifth member of that list
+
+# --- certification, 10 bytes ----------------------------------------------
+
+0b                       # certify_start
+0e                       # certify_complete
+02 2d 34                 # lower bound "-4"
+02 2d 34                 # upper bound "-4"
+01 30                    # gap "0"
+
+# --- the certificate and its verdict, 8 bytes -----------------------------
+
+10                       # proof_assembled
+a0 01                    # 160 bytes, two-byte variable-length integer
+11                       # verify_result
+01                       # accepted
+00                       # no rejection identifier: a length of zero
+d9 03                    # 473 verifier work units
+
+# --- the terminal status, 2 bytes -----------------------------------------
+
+12                       # terminal
+00                       # status 0: "optimal", the first member of that list
+
+# --- the terminator, 7 bytes ----------------------------------------------
+
+ff                       # end
+0a                       # ten events before it
+48 b9 41 01              # reflected Castagnoli checksum of the 62 bytes above,
+                         # little endian. Transport corruption detection, never
+                         # proof of anything.

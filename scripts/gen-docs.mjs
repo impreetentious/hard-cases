@@ -239,6 +239,7 @@ const PAGES = {
   "hcc.toml": "certificate.md",
   "transforms.toml": "presolve-transforms.md",
   "cuts.toml": "cuts.md",
+  "trace.toml": "trace-events.md",
   "rejections.toml": "rejections.md",
 };
 

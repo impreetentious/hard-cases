@@ -1,0 +1,179 @@
+# The trace event schema, version 1.
+#
+# A trace is what the search did, written down. It is not a proof and it never
+# becomes one: a reader of a trace learns which nodes were opened and in what
+# order, and learns nothing about whether the answer is right. That is the
+# certificate's job, and keeping the two apart is why this schema exists at all.
+#
+# The rule the whole schema is built around: a floating-point field and an
+# exact field are never the same kind of thing, and are never spelled the same
+# way. Search bounds, violations, and node objectives are floats, because the
+# search that produced them is floating point. Objective values a claim could
+# rest on are exact, and are carried as canonical rational text. In the textual
+# encoding a float is a number and an exact value is a string, so a consumer
+# that renders one as the other has to do it on purpose.
+#
+# The event list is closed. A new kind is a version bump on this contract, with
+# a decision record and regenerated vectors, because a consumer that skipped an
+# event it did not recognise would be reporting a search that did not happen.
+
+[meta]
+version = 1
+title = 'Trace event schema v1'
+summary = 'The closed list of trace events, their fields, and the two encodings a trace is written in.'
+
+# ---------------------------------------------------------------------------
+# Field kinds
+# ---------------------------------------------------------------------------
+
+[kinds]
+count = 'A nonnegative integer: an identifier, an index, a length, or a tally. Encoded as an unsigned little-endian base-128 integer in the binary form and as a JSON integer in the textual one.'
+float = 'A binary64 value the search produced. Encoded as its eight bytes in little-endian order in the binary form, and in the textual form as a JSON number that always carries a decimal point or an exponent, so it can never be mistaken for a count. A value that is not finite is a defect and is refused at construction rather than written.'
+exact = 'A rational as canonical text, the same spelling a certificate uses. Encoded as a length and its bytes in the binary form, and as a JSON string in the textual one. Never a JSON number.'
+word = 'A member of a closed list. Encoded as its position in that list in the binary form and as a JSON string in the textual one. A position the list does not have is refused.'
+flag = 'A boolean. One byte, zero or one, in the binary form; a JSON boolean in the textual one.'
+text = 'A short identifier, such as a rejection code. A length and its bytes, or a JSON string. Absent is a length of zero, and null in the textual form.'
+
+# ---------------------------------------------------------------------------
+# The encodings
+# ---------------------------------------------------------------------------
+
+[binary]
+magic = 'HCT1'
+header = 'The magic, then the schema version as one byte.'
+record = 'One byte naming the event kind, then its fields in the order this document lists them. There is no length prefix on a record: the kind determines the fields, and a consumer that cannot determine them cannot skip them either.'
+end = 'The final record is End: the number of events before it as a count, then the reflected Castagnoli checksum of every byte from the magic through that count, as four bytes little-endian. The checksum is transport corruption detection and is never proof of anything.'
+order = 'Events appear in the order they happened. A trace is compared byte for byte between two runs of the same solve, so any ordering that depended on iteration over an unordered container would break the comparison rather than merely look untidy.'
+
+[text]
+form = 'A JSON document: an object with a version and an array of events, each an object whose first member is its kind.'
+members = 'Every field of an event appears, in the order this document lists them, and no field is omitted for being empty. An absent text field is null.'
+equivalence = 'The two encodings carry the same events, and the textual one is a function of what a binary trace reads back as. The binary form reproduces itself through a read and a rewrite, byte for byte, and the textual form is rendered from the events that read produced; both are held against the frozen pair. There is no reader for the textual form in this contract: it is what a trace is read *by a person* in, and a consumer that needs to load one loads the binary.'
+
+# ---------------------------------------------------------------------------
+# Closed word lists
+# ---------------------------------------------------------------------------
+
+[words.stage]
+values = ['normal', 'refactored', 'perturbed', 'bland']
+covers = 'Where the linear search is on its escalation ladder.'
+
+[words.family]
+values = ['gomory', 'cover']
+covers = 'Which separator derived a cut. The list is closed by decision, not by what happens to be implemented.'
+
+[words.source]
+values = ['round', 'dive', 'pump', 'supplied', 'node']
+covers = 'Where an incumbent came from: one of the three heuristics, a point the caller supplied, or a node whose relaxation was already integral.'
+
+[words.blocked]
+values = ['no-bound', 'cap', 'refused']
+covers = 'Why an open node could not be given an exact bound during frontier certification.'
+
+[words.status]
+values = ['optimal', 'infeasible', 'unbounded', 'feasible(bound,gap)', 'feasible(no-certified-bound)', 'no-progress', 'error']
+covers = 'How the run ended. The first six are the claim vocabulary exactly; error is the trace-only member, for a run that ended without reaching one of them.'
+
+# ---------------------------------------------------------------------------
+# The events, in encoding order
+# ---------------------------------------------------------------------------
+
+[event.transform_applied]
+code = 0
+fields = ['rule: count', 'position: count']
+covers = 'One presolve transform was applied. The rule number is the one the certificate encodes, so a reader can line a trace up against a proof.'
+
+[event.root_lp]
+code = 1
+fields = ['iterations: count', 'objective: float']
+covers = 'The root relaxation was solved. The objective is the float the simplex reported and is not a bound anything may rest on.'
+
+[event.node_open]
+code = 2
+fields = ['node: count', 'parent: count', 'depth: count']
+covers = 'A node was opened. The root is its own parent, at depth zero.'
+
+[event.node_solved]
+code = 3
+fields = ['node: count', 'iterations: count', 'objective: float']
+covers = 'A node relaxation was solved.'
+
+[event.node_pruned]
+code = 4
+fields = ['node: count', 'bound: exact']
+covers = 'A node was closed by bound. The bound is exact because it is the quantity a proof would cite.'
+
+[event.node_infeasible]
+code = 5
+fields = ['node: count']
+covers = 'A node relaxation had no feasible point.'
+
+[event.node_integral]
+code = 6
+fields = ['node: count', 'objective: exact']
+covers = 'A node relaxation was integral where the model declares integrality.'
+
+[event.branch]
+code = 7
+fields = ['node: count', 'variable: count', 'split: exact']
+covers = 'A node was split on a variable at an integer threshold. The split is exact because a noninteger one is a forgery the verifier refuses, and a trace that rounded it would hide that.'
+
+[event.cut_added]
+code = 8
+fields = ['identifier: count', 'scope: count', 'family: word(family)', 'violation: float']
+covers = 'A cut entered the pool. The scope is the node whose subtree it is valid in, which is what stops a sibling citing it.'
+
+[event.incumbent]
+code = 9
+fields = ['objective: exact', 'source: word(source)']
+covers = 'A point survived exact screening and became the incumbent. The objective is exact: a float incumbent is not an incumbent here.'
+
+[event.search_gap]
+code = 10
+fields = ['lower: float', 'upper: float']
+covers = 'The float bounds the search is working between. These are the dashed lines on a convergence plot and they are never a certified gap.'
+
+[event.certify_start]
+code = 11
+fields = []
+covers = 'Frontier certification began: the point where the search stops guessing and the assembler starts proving.'
+
+[event.certify_node]
+code = 12
+fields = ['node: count', 'bound: exact']
+covers = 'An open node received an exact bound.'
+
+[event.certify_blocked]
+code = 13
+fields = ['node: count', 'reason: word(blocked)']
+covers = 'An open node could not receive one, and why.'
+
+[event.certify_complete]
+code = 14
+fields = ['lower: exact', 'upper: exact', 'gap: exact']
+covers = 'Certification finished with an exact global bound, an exact incumbent value, and the exact difference. All three are exact or the event is not written.'
+
+[event.escalation]
+code = 15
+fields = ['stage: word(stage)']
+covers = 'The linear search moved up its escalation ladder.'
+
+[event.proof_assembled]
+code = 16
+fields = ['bytes: count']
+covers = 'A certificate was assembled, and how large it is.'
+
+[event.verify_result]
+code = 17
+fields = ['accepted: flag', 'rejection: text', 'work: count']
+covers = 'The independent verifier answered. The work figure is its own deterministic units and is never compared against the solver effort.'
+
+[event.terminal]
+code = 18
+fields = ['status: word(status)']
+covers = 'How the run ended. Exactly one of these appears, and it is the last event before End.'
+
+[event.end]
+code = 255
+fields = ['events: count', 'checksum: four bytes']
+covers = 'The terminator. Its count is compared against the events actually read, so a truncated trace is a truncated trace rather than a shorter run.'

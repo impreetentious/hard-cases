@@ -24,6 +24,7 @@ pub mod reject;
 pub mod rng;
 pub mod spec;
 pub mod tol;
+pub mod trace;
 
 pub use claim::{Claim, NoProgressReason};
 pub use hash::{Crc32c, Sha256, crc32c, hex, instance_digest, sha256};

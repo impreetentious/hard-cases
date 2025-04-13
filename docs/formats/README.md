@@ -23,4 +23,5 @@ fixtures.
 | [HCC certificate format and proof calculus v1](certificate.md) | `spec/v1/hcc.toml` | The certificate encoding, the closed record kinds and their order, and the four inference rules. |
 | [Presolve transforms v1](presolve-transforms.md) | `spec/v1/transforms.toml` | The eight closed transforms, their applicability conditions, and their forward and reverse maps. |
 | [Cut derivations v1](cuts.md) | `spec/v1/cuts.toml` | The literal Gomory mixed-integer formula and the exact cover lifting dynamic program. |
+| [Trace event schema v1](trace-events.md) | `spec/v1/trace.toml` | The closed list of trace events, their fields, and the two encodings a trace is written in. |
 | [Rejection identifiers v1](rejections.md) | `spec/v1/rejections.toml` | Every rejection identifier, the group it belongs to, and the earliest check that emits it. |

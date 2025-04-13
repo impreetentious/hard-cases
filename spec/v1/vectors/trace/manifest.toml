@@ -1,0 +1,29 @@
+# Trace vectors, version 1.
+#
+# One trace in both of its encodings, byte for byte. They exist for the reason
+# the certificate vectors do: an encoding is a contract between programs that
+# never meet, and the only way to know two of them agree is to hold both
+# against bytes neither produced.
+#
+# The pair is also where the schema's central distinction is visible. The same
+# run writes its search objective as a binary64 and its bound as canonical
+# rational text; in the textual encoding those are a number and a string, and a
+# consumer that renders one as the other has to do it on purpose.
+
+[meta]
+version = 1
+title = 'Trace vectors v1'
+summary = 'One trace of one solve, hand-encoded in binary and rendered in text.'
+
+[format]
+encoding = 'Hexadecimal byte pairs. A number sign begins a comment that runs to the end of the line. Whitespace between bytes is insignificant.'
+authority = 'The stripped bytes are the vector. An implementation that cannot reproduce them and cannot read them disagrees with the specification, not with another implementation.'
+
+[vector.tiny_run]
+file = 'tiny-run.hex'
+canon = 'tiny-run.json'
+instance = '../mps/tiny.mps'
+bytes = 66
+events = 10
+covers = 'The shortest trace a solved instance can have: a root relaxation that is already integral, an incumbent from the node rather than from a heuristic, a frontier that was closed before certification began, and a verdict. It exercises the header, a one-byte and a two-byte variable-length integer, a binary64 field, exact rational text, three closed word lists, a flag, and an absent text field.'
+working = 'The counters are the ones the run reported: one simplex iteration, a certificate of 160 bytes, and 473 verifier work units. The checksum was computed by a separate implementation of the reflected Castagnoli polynomial, which reproduces the two literal checksum vectors the certificate contract freezes.'
