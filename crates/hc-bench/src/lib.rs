@@ -17,6 +17,7 @@ pub mod campaign;
 pub mod corpus;
 pub mod cuts;
 pub mod exhaustive;
+pub mod miplib;
 pub mod proof;
 pub mod receipt;
 pub mod ref_lp;

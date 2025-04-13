@@ -98,7 +98,7 @@ shows the machinery that catches it.
 - [`docs/formats/`](docs/formats/) — the certificate grammar, the accepted
   MPS and LP subsets, and the JSON schema, generated from the inert assets
 - [`docs/case-files/`](docs/case-files/) — real bugs, minimized, with the
-  instance and certificate that exposed them
+  instance or the seed that exposed them, and a test that replays each one
 - [`docs/adr/`](docs/adr/) — the numbered decisions, append-only
 - [`spec/`](spec/) — the inert proof calculus: canonicalization, rules,
   rejection identifiers, and hand-worked vectors. Code is never the source of
@@ -123,4 +123,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.11.7
+**Version:** v0.11.8

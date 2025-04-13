@@ -1,0 +1,47 @@
+# The mixed-integer subset, version 1.
+#
+# The same arrangement the linear collection uses, and for the same reasons.
+# These files are not committed: they belong to a public collection with its own
+# provenance, and vendoring a copy would make a scoreboard a statement about the
+# copy rather than about the collection. `scripts/fetch-miplib.sh` retrieves
+# them, records a pin on the first fetch, and verifies it on every fetch after.
+#
+# The list is fixed before first publication and is never pruned to flatter
+# results. Some of these are not expected to solve here at all; they stay on the
+# board as no-progress with the reason beside them, because a board that dropped
+# what it could not do would be measuring the list rather than the solver.
+#
+# What this file does not carry is published optimal values. They exist and they
+# are what a value cross-check needs, and writing them down from memory would be
+# the exact failure this project is built against: a number nobody fetched,
+# checked against a solver that will then agree with it. The optional file
+# described below is where they go when somebody has actually retrieved them,
+# and until then the board reports what it proved rather than what it matched.
+
+[meta]
+version = 1
+title = 'Mixed-integer subset v1'
+summary = 'The mixed-integer instance names the scoreboard covers, which of them the development split uses, and what pinning them means.'
+form = 'free'
+source = 'The MIPLIB 2017 collection, in its compressed MPS distribution.'
+committed = false
+
+[split]
+covers = 'The development half is what a change may be tuned against. The rest is looked at, never tuned on: a search whose settings were chosen by watching an instance has been fitted to it, and a scoreboard built from fitted settings measures the fitting.'
+dev = ['enlight_hard', 'gen-ip002', 'gen-ip054', 'flugpl', 'gr4x6', 'stein27']
+held = ['ej', 'markshare_4_0', 'mas74', 'mas76', 'misc03', 'mzzv11', 'neos5', 'noswot', 'p0033', 'p0201', 'pk1', 'stein45', 'timtab1', 'tr12-30']
+aspirational = 'Several of the held instances are far beyond what a single-threaded search with no probing, no symmetry handling, and no restarts will close. They are on the list deliberately and they stay on it.'
+
+[pin]
+file = 'pinned.toml'
+rule = 'A digest per instance, written by the first fetch and verified by every fetch after it. A mismatch is a failure, never a silent update.'
+absent = 'When the pin file is missing, no instance has been fetched on this machine, and the harness says so in those words rather than reporting an empty run as a clean one.'
+
+[published]
+file = 'published.toml'
+rule = 'An optional file of published objective values, one per instance, retrieved by hand from the collection and recorded with the date they were read. When it is present every solved instance is cross-checked against it and a disagreement is a finding; when it is absent the harness says the values were not cross-checked.'
+forbidden = 'No value in that file may be written from memory or from this solver. A published optimum this project produced itself is not a cross-check, it is a mirror.'
+
+[budget]
+nodes = 20000
+covers = 'The effort cap a harness run pays per instance, in nodes rather than in seconds. An instance that does not close inside it is no-progress, which is an honest answer and the one the scoreboard prints.'

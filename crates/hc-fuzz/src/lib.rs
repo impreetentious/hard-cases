@@ -62,9 +62,15 @@ impl Budget {
     };
 
     /// The seeds this budget covers.
+    ///
+    /// The range itself, unscrambled. A finding reports the seed it came from
+    /// and a case file writes that number down, so the number has to be one
+    /// that walks straight back into the campaign: a budget that mixed its
+    /// seeds would report values nobody could hand back to it. The mixing that
+    /// makes consecutive numbers behave like unrelated ones happens inside the
+    /// generator, where the frozen seeding rule already does it.
     pub fn seeds(self) -> impl Iterator<Item = u64> {
-        (self.from..self.from.saturating_add(self.cases))
-            .map(|seed| seed.wrapping_mul(0x9e37_79b9_7f4a_7c15))
+        self.from..self.from.saturating_add(self.cases)
     }
 }
 
