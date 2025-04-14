@@ -32,6 +32,10 @@ jobs:
       # by the standalone binary with none of the solver linked, and by the
       # wrapper the command line offers, and the two must agree byte for byte.
       - run: ./scripts/ci/parity.sh
+      # Every artifact produced twice in separate processes and compared byte
+      # for byte: the canonical dump, the certificate, the explanation, the
+      # trace, and the verifier's verdict and work units.
+      - run: ./scripts/ci/determinism.sh
       # The certification campaign at its nightly size, under release
       # optimizations. A hundred thousand generated instances, each solved,
       # rebuilt exactly, and rechecked by the standalone verifier.

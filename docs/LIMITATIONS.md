@@ -174,6 +174,20 @@ model is refused rather than approximated, and the JSON schema — which quotes
 names and carries every value as text — is the one that can usually still take
 it.
 
+## What the determinism gate compares
+
+Every artifact is produced twice, in two separate processes, and compared byte
+for byte: the canonical dump, the certificate, the solve report, the
+explanation, the trace, and the verifier's verdict and work units. Two
+processes rather than two calls in one, because an in-process repeat shares the
+allocator state and the address-space layout that this gate exists to catch.
+
+It runs on one machine at a time. Equality between platforms is asserted by
+construction — no ambient clock, no environment, no unordered container, no
+fused multiply-add, one thread — and is not yet measured by a job that runs the
+same instance on two of them and compares. Until that exists, cross-platform
+determinism is a design claim here and not a tested one.
+
 ## What the fuzzing establishes, and what it does not
 
 The fuzz corpus is generated from seeds rather than grown from coverage

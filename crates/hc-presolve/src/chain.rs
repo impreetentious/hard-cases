@@ -6,14 +6,22 @@
 //! not depend on it, because any chain whose records satisfy the two
 //! invariants is valid in any order.
 //!
-//! Termination is not an accident either. Every transform removes a row or a
-//! column, or strictly tightens a bound, and the tightening rule requires a
-//! strict improvement — so no rule can fire twice on the same situation and
-//! the fixpoint stops.
+//! Termination needs more than it looks like it needs. Seven of the eight
+//! transforms remove a row or a column, so between them they can fire at most
+//! as often as the model has rows and columns. The eighth tightens a bound,
+//! and requires a strict improvement — which sounds like the same argument and
+//! is not one. Two rows can tighten each other by ever-smaller exact amounts
+//! forever, each improvement strict, the sequence converging on a limit it
+//! never reaches, and the rationals growing at every step until the arithmetic
+//! is the slowest part of the program. That is not a hypothetical: it is what
+//! a generated four-column model did, and it is why the tightening rule is
+//! given a budget below.
 //!
 //! A derivation that closes a domain to nothing ends the chain. It is not a
 //! failure of the transform and it is not an ad hoc witness: the record names
 //! the derivation, and the verifier recomputes it on the model it holds.
+
+use std::collections::BTreeMap;
 
 use hc_core::{Model, Sha256};
 use hc_exact::Rational;
@@ -21,6 +29,21 @@ use hc_exact::Rational;
 use crate::draft::Draft;
 use crate::map::reverse;
 use crate::rule::{Inapplicable, Rule, apply, empty_column_value, singleton_bounds};
+
+/// How often one side of one column's bound may be tightened.
+///
+/// A budget rather than a threshold, because the alternative is a threshold: a
+/// smallest improvement worth taking, which is a tolerance, and a tolerance in
+/// an exact reduction is the one thing this project has no room for. Counting
+/// is honest instead — presolve is an optimization, a reduction it declines to
+/// make costs nothing but effort, and stopping early leaves a weaker reduced
+/// model that is still exactly equivalent to the original.
+///
+/// Eight is generous for a model that converges and immediately fatal to one
+/// that does not. Every real tightening comes from a different row or a
+/// different neighbour's bound, and a column whose bound has moved eight times
+/// on one side is a column being chased rather than reduced.
+pub const TIGHTENINGS_PER_SIDE: usize = 8;
 
 /// One step of a chain: the rule, and the hash of what it produced.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,11 +117,22 @@ pub fn reduce(model: &Model) -> Chain {
     let mut current = model.clone();
     let mut steps: Vec<Step> = Vec::new();
     let mut contradiction = None;
+    // One count per column and side, so the tightening rule cannot be chased
+    // around a cycle of ever-smaller improvements.
+    let mut spent: BTreeMap<(usize, bool), usize> = BTreeMap::new();
 
     'fixpoint: loop {
         for rule in candidates(&current) {
+            if let Rule::TightenBound { column, upper, .. } = &rule {
+                if spent.get(&(*column, *upper)).copied().unwrap_or(0) >= TIGHTENINGS_PER_SIDE {
+                    continue;
+                }
+            }
             match apply(&current, &rule) {
                 Ok(next) => {
+                    if let Rule::TightenBound { column, upper, .. } = &rule {
+                        *spent.entry((*column, *upper)).or_insert(0) += 1;
+                    }
                     steps.push(Step {
                         rule,
                         result: model_hash(&next),

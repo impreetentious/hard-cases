@@ -329,3 +329,109 @@ fn the_reverse_map_of_an_aggregate_is_integral_on_every_value_of_the_sum() {
         );
     }
 }
+
+/// The model a generated campaign found the reduction chain could not finish.
+///
+/// Reduced here rather than described: it is four columns and four rows, two
+/// of which tighten each other's bounds by ever-smaller exact amounts. Every
+/// improvement is strict and the sequence converges without arriving, so the
+/// fixpoint had no reason to stop and the rationals grew until the arithmetic
+/// was the slowest part of the program.
+const CHASING: &[u8] = b"NAME          DRAFT
+OBJSENSE
+    MAX
+ROWS
+ N  obj
+ G  r0
+ G  r1
+ G  r2
+ G  r3
+COLUMNS
+    x0        obj       4
+    x0        r0        4
+    x0        r1        3
+    x0        r1        -3
+    x0        r2        1
+    x0        r3        100
+    x1        obj       -0.5
+    x1        r1        10
+    x1        r3        3
+    x1        r3        -3
+    MARK2     'MARKER'                 'INTORG'
+    x2        obj       2
+    x2        r0        4
+    x2        r2        -0.25
+    MARK2     'MARKER'                 'INTEND'
+    x3        obj       0
+    x3        r0        2
+    x3        r1        100
+    x3        r2        1
+RHS
+    rhs       obj       2.5
+    rhs       r0        0
+    rhs       r1        1
+    rhs       r2        1
+    rhs       r3        0
+RANGES
+    rng       r0        5
+    rng       r3        5
+BOUNDS
+ MI bnd       x0
+ UP bnd       x0        4
+ LO bnd       x1        -1
+ LO bnd       x2        1
+ LO bnd       x3        -10
+ UP bnd       x3        10
+ENDATA
+";
+
+#[test]
+fn a_bound_that_can_be_tightened_forever_is_tightened_a_bounded_number_of_times() {
+    // The regression. Before the budget this call did not return: the test
+    // that catches it is that it returns at all, and the assertions after are
+    // about it having done something rather than nothing.
+    let model = hc_io::mps::read(CHASING, hc_io::mps::Form::Free).expect("a readable instance");
+    let chain = hc_presolve::reduce(&model);
+
+    let tightenings = chain
+        .steps
+        .iter()
+        .filter(|step| matches!(step.rule, hc_presolve::Rule::TightenBound { .. }))
+        .count();
+    assert!(
+        tightenings > 0,
+        "the chain reduced nothing, so the regression is not being exercised"
+    );
+    // Four columns, two sides each, and a budget per side.
+    assert!(
+        tightenings <= 8 * hc_presolve::chain::TIGHTENINGS_PER_SIDE,
+        "the tightening rule fired {tightenings} times"
+    );
+
+    // And the budget did not cost correctness: the reduced model is still
+    // exactly equivalent, which is what the invariants below establish for
+    // every chain.
+    assert!(chain.reduced.variables().len() <= model.variables().len());
+}
+
+#[test]
+fn the_budget_is_spent_per_column_and_side_rather_than_in_total() {
+    // A budget shared across the model would stop reducing a large one almost
+    // immediately. Each side of each column gets its own, so a model with many
+    // columns is reduced as far as a model with one.
+    let model = hc_io::mps::read(CHASING, hc_io::mps::Form::Free).expect("a readable instance");
+    let chain = hc_presolve::reduce(&model);
+    let mut spent: std::collections::BTreeMap<(usize, bool), usize> =
+        std::collections::BTreeMap::new();
+    for step in &chain.steps {
+        if let hc_presolve::Rule::TightenBound { column, upper, .. } = step.rule {
+            *spent.entry((column, upper)).or_insert(0) += 1;
+        }
+    }
+    for ((column, upper), count) in spent {
+        assert!(
+            count <= hc_presolve::chain::TIGHTENINGS_PER_SIDE,
+            "column {column} side {upper} was tightened {count} times"
+        );
+    }
+}
