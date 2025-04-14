@@ -12,8 +12,9 @@
 //! footnote somewhere else.
 
 use hc_cert::assemble::assemble_lp;
-use hc_cert::explain::tree;
+use hc_cert::explain::{records, tree};
 use hc_cert::mip::{assemble_mip, assemble_presolved};
+use hc_cert::trace::{Run as TraceRun, Verdict as TraceVerdict, of as trace_of, status_of};
 use hc_core::{Model, Tol};
 use hc_io::mps::{Form, read};
 use hc_io::{json, lp};
@@ -300,41 +301,107 @@ pub fn certify(
     }
 }
 
+/// What `hc explain` was asked to print.
+#[derive(Clone, Debug, Default)]
+pub struct Explanation {
+    /// Which format's rules the instance is read under.
+    pub shape: Shape,
+    /// Whether to draw the proof tree.
+    pub tree: bool,
+    /// Whether to list the records the proof is made of.
+    pub proof: bool,
+    /// Whether the caller asked for the trace of the run.
+    pub trace: bool,
+}
+
+/// What an explanation produced.
+pub struct Explained {
+    /// What to print.
+    pub report: String,
+    /// The trace of the run, when one was asked for.
+    pub trace: Option<Vec<u8>>,
+    /// How it ended.
+    pub ending: Ending,
+}
+
 /// `hc explain`: the proof, drawn.
 ///
 /// The tree is rendered from the certificate rather than from the search, and
 /// it is rendered only after the verifier has accepted it. An explanation of a
 /// proof nobody checked would be an explanation of a hypothesis.
+///
+/// The trace is the other half and is deliberately not mixed in with it. A
+/// proof is what was established; a trace is what happened on the way, most of
+/// which established nothing. Printing them together would invite a reader to
+/// treat a node the search opened as a step in the argument.
 #[must_use]
-pub fn explain(instance_name: &str, raw: &[u8], shape: Shape) -> (String, Ending) {
-    let model = match parse_instance(raw, shape) {
+pub fn explain(instance_name: &str, raw: &[u8], asked: &Explanation) -> Explained {
+    let refuse = |report: String| Explained {
+        report,
+        trace: None,
+        ending: Ending::Refused,
+    };
+    let model = match parse_instance(raw, asked.shape) {
         Ok(model) => model,
-        Err(message) => return (format!("REFUSED: {message}\n"), Ending::Refused),
+        Err(message) => return refuse(format!("REFUSED: {message}\n")),
     };
     let chain = reduce(&model);
     let search = search_tree(&chain.reduced, &MipOptions::default());
     let assembled = match assemble_presolved(&model, &chain, raw, &search) {
         Ok(assembled) => assembled,
-        Err(reason) => {
-            return (format!("no certificate: {reason}\n"), Ending::Refused);
-        }
+        Err(reason) => return refuse(format!("no certificate: {reason}\n")),
     };
     let bytes = assembled.encode();
-    match verify(&bytes, raw) {
-        Err(refusal) => (refused(&refusal), Ending::Refused),
-        Ok(verdict) => {
-            let mut out = tree(&assembled);
-            let _ = core::fmt::Write::write_fmt(
-                &mut out,
-                format_args!(
-                    "verified: {} bytes, {} work units, widest rational {} bits\n",
-                    verdict.bytes, verdict.work, verdict.peak_bits
-                ),
-            );
-            let _ =
-                core::fmt::Write::write_fmt(&mut out, format_args!("instance: {instance_name}\n"));
-            (out, Ending::Fine)
-        }
+    let verdict = match verify(&bytes, raw) {
+        Err(refusal) => return refuse(refused(&refusal)),
+        Ok(verdict) => verdict,
+    };
+
+    let mut report = String::new();
+    if asked.tree {
+        report.push_str(&tree(&assembled));
+    }
+    if asked.proof {
+        report.push_str(&records(&assembled));
+    }
+    let _ = core::fmt::Write::write_fmt(
+        &mut report,
+        format_args!(
+            "verified: {} bytes, {} work units, widest rational {} bits\n",
+            verdict.bytes, verdict.work, verdict.peak_bits
+        ),
+    );
+    let _ = core::fmt::Write::write_fmt(&mut report, format_args!("instance: {instance_name}\n"));
+
+    let trace = asked.trace.then(|| {
+        let assembled_trace = trace_of(&TraceRun {
+            chain: Some(&chain),
+            search: &search,
+            certificate: Some(&assembled),
+            bytes: Some(bytes.len() as u64),
+            verdict: Some(TraceVerdict {
+                accepted: true,
+                rejection: None,
+                work: verdict.work,
+            }),
+            status: status_of(search.ending, search.incumbent.is_some()),
+        });
+        let encoded = assembled_trace.encode().unwrap_or_default();
+        let _ = core::fmt::Write::write_fmt(
+            &mut report,
+            format_args!(
+                "trace: {} event(s), {} bytes\n",
+                assembled_trace.events.len(),
+                encoded.len()
+            ),
+        );
+        encoded
+    });
+
+    Explained {
+        report,
+        trace,
+        ending: Ending::Fine,
     }
 }
 
@@ -494,17 +561,79 @@ mod tests {
 
     #[test]
     fn explaining_an_instance_draws_a_tree_the_verifier_accepted() {
-        let (out, ending) = explain("tiny.mps", TINY, Shape::MpsFixed);
-        assert_eq!(ending, Ending::Fine);
-        assert!(out.starts_with("node 0  "));
-        assert!(out.contains("claim: optimal"));
-        assert!(out.contains("verified: "));
-        assert!(out.is_ascii());
+        let both = Explanation {
+            tree: true,
+            proof: true,
+            ..Explanation::default()
+        };
+        let explained = explain("tiny.mps", TINY, &both);
+        assert_eq!(explained.ending, Ending::Fine);
+        assert!(explained.report.starts_with("node 0  "));
+        assert!(explained.report.contains("claim: optimal"));
+        assert!(explained.report.contains("verified: "));
+        assert!(explained.report.contains("records\n"));
+        assert!(explained.report.is_ascii());
+        assert!(explained.trace.is_none(), "no trace was asked for");
+    }
+
+    #[test]
+    fn each_half_of_an_explanation_can_be_asked_for_on_its_own() {
+        let only_tree = explain(
+            "tiny.mps",
+            TINY,
+            &Explanation {
+                tree: true,
+                ..Explanation::default()
+            },
+        );
+        assert!(only_tree.report.starts_with("node 0  "));
+        assert!(!only_tree.report.contains("records\n"));
+
+        let only_proof = explain(
+            "tiny.mps",
+            TINY,
+            &Explanation {
+                proof: true,
+                ..Explanation::default()
+            },
+        );
+        assert!(only_proof.report.starts_with("records\n"));
+        assert!(!only_proof.report.contains("node 0  "));
+        // The record listing names what the tree drew: a root, a bound, the
+        // incumbent that attains it, and the claim.
+        assert!(only_proof.report.contains("root               node 0"));
+        assert!(only_proof.report.contains("dual-bound"));
+        assert!(only_proof.report.contains("claim              kind 1"));
+    }
+
+    #[test]
+    fn a_traced_explanation_writes_the_trace_of_that_run() {
+        let explained = explain(
+            "tiny.mps",
+            TINY,
+            &Explanation {
+                tree: true,
+                trace: true,
+                ..Explanation::default()
+            },
+        );
+        let written = explained.trace.expect("a trace was asked for");
+        let read = hc_core::trace::Trace::decode(&written).expect("a readable trace");
+        assert!(!read.events.is_empty());
+        assert!(explained.report.contains("trace: "));
+        // The last event says how the run ended, and the report says the
+        // verifier accepted it. Those are the same run.
+        assert!(matches!(
+            read.events.last(),
+            Some(hc_core::trace::Event::Terminal { status: 0 })
+        ));
+        assert!(explained.report.contains("verified: "));
     }
 
     #[test]
     fn explaining_something_that_is_not_an_instance_refuses() {
-        let (out, ending) = explain("junk", b"not an instance\n", Shape::MpsFixed);
+        let explained = explain("junk", b"not an instance\n", &Explanation::default());
+        let (out, ending) = (explained.report, explained.ending);
         assert_eq!(ending, Ending::Refused);
         assert!(out.starts_with("REFUSED: "));
     }

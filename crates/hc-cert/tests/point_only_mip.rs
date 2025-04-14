@@ -78,6 +78,8 @@ fn stalled(model: &Model) -> Search {
         opened: 1,
         iterations: 0,
         heuristics: Vec::new(),
+        spent: Vec::new(),
+        separated: Vec::new(),
         unbounded: None,
     }
 }

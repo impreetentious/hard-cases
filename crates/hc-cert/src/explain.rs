@@ -238,6 +238,100 @@ fn join(point: &[Rational]) -> String {
         .join(", ")
 }
 
+/// Lists the records a certificate is made of, one to a line.
+///
+/// The tree above is the argument; this is the material. They are separate
+/// because a reader checking that a proof cites what it claims to cite wants
+/// the records in the order the verifier will read them, with their identifiers
+/// and their sizes, and not a picture.
+///
+/// Nothing here is summarised away. A record with fifty multipliers says fifty
+/// rather than showing three of them, because a listing that quietly elided
+/// would be a listing somebody could be misled by.
+#[must_use]
+pub fn records(certificate: &Certificate) -> String {
+    let mut out = String::from("records\n");
+    for (position, record) in certificate.records.iter().enumerate() {
+        let detail = match record {
+            Record::Transform {
+                rule, parameters, ..
+            } => format!(
+                "transform          rule {rule}, {} parameter(s)",
+                parameters.len()
+            ),
+            Record::TransformContradiction { rule, sources } => format!(
+                "transform-empty    rule {rule}, from {} inequality(s)",
+                sources.len()
+            ),
+            Record::Root { node, .. } => format!("root               node {node}"),
+            Record::DualBound { node, terms } => format!(
+                "dual-bound         node {node}, {} multiplier(s)",
+                terms.len()
+            ),
+            Record::Contradiction { node, terms } => format!(
+                "contradiction      node {node}, {} multiplier(s)",
+                terms.len()
+            ),
+            Record::GmiCut {
+                scope,
+                combination,
+                isolated,
+                coefficients,
+                ..
+            } => format!(
+                "cut-gomory         scope {scope}, from {} row(s), isolating column {isolated}, {} coefficient(s)",
+                combination.len(),
+                coefficients.len()
+            ),
+            Record::CoverCut {
+                scope,
+                source,
+                cover,
+                coefficients,
+                ..
+            } => format!(
+                "cut-cover          scope {scope}, from inequality {source}, cover of {}, {} coefficient(s)",
+                cover.len(),
+                coefficients.len()
+            ),
+            Record::Branch {
+                parent,
+                variable,
+                split,
+                ..
+            } => format!(
+                "branch             node {parent} on column {variable} at {}",
+                split.to_canonical_string()
+            ),
+            Record::LeafBound { node, .. } => format!("leaf-bound         node {node}"),
+            Record::LeafInfeas { node, .. } => format!("leaf-infeasible    node {node}"),
+            Record::LeafIntegral { node, .. } => format!("leaf-integral      node {node}"),
+            Record::LeafFrontier { node, .. } => format!("leaf-frontier      node {node}"),
+            Record::Incumbent {
+                original,
+                objective,
+                ..
+            } => format!(
+                "incumbent          {} component(s), attaining {}",
+                original.len(),
+                objective.to_canonical_string()
+            ),
+            Record::FeasiblePoint { point, .. } => {
+                format!("feasible-point     {} component(s)", point.len())
+            }
+            Record::Ray { direction, .. } => {
+                format!("ray                {} component(s)", direction.len())
+            }
+            Record::Claim { kind, .. } => format!("claim              kind {}", kind.code()),
+            Record::End { counts } => {
+                format!("end                {} record kind(s) counted", counts.len())
+            }
+        };
+        let _ = writeln!(out, "  {position:>4}  {detail}");
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

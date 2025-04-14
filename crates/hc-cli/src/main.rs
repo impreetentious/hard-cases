@@ -34,12 +34,30 @@ fn main() -> ExitCode {
             print!("{}", hc_bench::receipt::of(&directory).render());
             code(Ending::Fine)
         }
-        Command::Explain { instance, shape } => match slurp(&instance) {
+        Command::Explain {
+            instance,
+            shape,
+            tree,
+            proof,
+            trace,
+        } => match slurp(&instance) {
             Err(ending) => code(ending),
             Ok(bytes) => {
-                let (out, ending) = run::explain(&instance, &bytes, shape);
-                print!("{out}");
-                code(ending)
+                let asked = run::Explanation {
+                    shape,
+                    tree,
+                    proof,
+                    trace: trace.is_some(),
+                };
+                let explained = run::explain(&instance, &bytes, &asked);
+                print!("{}", explained.report);
+                if let (Some(destination), Some(written)) = (trace, explained.trace) {
+                    if let Err(error) = std::fs::write(&destination, &written) {
+                        eprintln!("hc: cannot write {destination}: {error}");
+                        return code(Ending::Refused);
+                    }
+                }
+                code(explained.ending)
             }
         },
         Command::Check { instance, shape } => match slurp(&instance) {

@@ -43,7 +43,7 @@
 //! is the single thing this project exists to refuse.
 
 use hc_core::{Model, Tol};
-use hc_cuts::pool::{Entry, Pool};
+use hc_cuts::pool::{Entry, Family, Pool};
 use hc_cuts::separate;
 use hc_exact::Rational;
 use hc_lp::dual::solve_from as solve_dual;
@@ -285,6 +285,41 @@ pub struct Attempt {
     pub outcome: &'static str,
 }
 
+/// What one node's relaxation cost, and what it reported.
+///
+/// Recorded because a trace has to say it and may not invent it. The objective
+/// is the float the simplex reported and is present only when the relaxation
+/// reached an optimum: an infeasible or unbounded node has no objective, and a
+/// record carrying a number for one would be a record of something that did
+/// not happen.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Spent {
+    /// The node.
+    pub node: u64,
+    /// Simplex iterations its relaxation took.
+    pub iterations: u64,
+    /// The float objective it reported, when it reported one.
+    pub objective: Option<f64>,
+}
+
+/// A cut entering the pool, and how far the point it was found at violated it.
+///
+/// The violation is measured where the cut is separated, because that is the
+/// only place it exists: a pool entry is a valid inequality and says nothing
+/// about the point it was derived from. It is a float and is reported as one;
+/// nothing rests on it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Separated {
+    /// The cut's position in the pool.
+    pub identifier: u64,
+    /// The node whose subtree it is valid in.
+    pub scope: u64,
+    /// Its family, as a position in the trace schema's closed list.
+    pub family: u8,
+    /// How far the separating point violated it.
+    pub violation: f64,
+}
+
 /// What a search found.
 #[derive(Clone, Debug)]
 pub struct Search {
@@ -304,6 +339,10 @@ pub struct Search {
     pub iterations: u64,
     /// Every heuristic run, in the order they happened, hits and misses alike.
     pub heuristics: Vec<Attempt>,
+    /// What each node relaxation cost, in the order the nodes were solved.
+    pub spent: Vec<Spent>,
+    /// Every cut that entered the pool, in the order it did.
+    pub separated: Vec<Separated>,
     /// The witness an unbounded node relaxation left, when one did.
     ///
     /// Present exactly when the ending is [`Ending::UnboundedRelaxation`]. It
@@ -386,6 +425,8 @@ pub fn run(model: &Model, options: &Options) -> Search {
         iterations: 0,
         unbounded: None,
         heuristics: Vec::new(),
+        spent: Vec::new(),
+        separated: Vec::new(),
     };
 
     while let Some(id) = walk.pick() {
@@ -440,6 +481,8 @@ struct Walk {
     unbounded: Option<Unbounded>,
     /// Every heuristic run, hits and misses alike.
     heuristics: Vec<Attempt>,
+    spent: Vec<Spent>,
+    separated: Vec<Separated>,
 }
 
 impl Walk {
@@ -580,7 +623,25 @@ impl Walk {
             found.extend(separate::cover(&canonical, &point, node));
             let mut added = false;
             for entry in found {
-                added |= self.pool.add(entry, lineage);
+                // The violation is measured against the point that separated
+                // the cut, here, because nowhere later has that point. It is a
+                // float and is recorded as one; the cut's validity is exact
+                // and is established somewhere else entirely.
+                let violation = violation_at(&entry, &point);
+                let scope = entry.scope;
+                let family = match entry.family {
+                    Family::Gomory => 0,
+                    Family::Cover => 1,
+                };
+                if self.pool.add(entry, lineage) {
+                    added = true;
+                    self.separated.push(Separated {
+                        identifier: self.pool.len() as u64 - 1,
+                        scope,
+                        family,
+                        violation,
+                    });
+                }
             }
             if !added {
                 return;
@@ -645,6 +706,16 @@ impl Walk {
             None => solve(&problem, &LpOptions::default()),
         };
         self.iterations += effort.iterations;
+        // What this node cost, kept rather than only added up. A trace has to
+        // say what each node took and may not invent it afterwards.
+        self.spent.push(Spent {
+            node: id,
+            iterations: effort.iterations,
+            objective: match &outcome {
+                LpOutcome::Optimal { objective, .. } => Some(*objective),
+                _ => None,
+            },
+        });
 
         // Whatever basis the node finished on is what its children start from.
         let finished = match &outcome {
@@ -1007,8 +1078,30 @@ impl Walk {
             opened: self.opened,
             iterations: self.iterations,
             heuristics: self.heuristics,
+            spent: self.spent,
+            separated: self.separated,
             unbounded: self.unbounded,
         }
+    }
+}
+
+/// How far a point violates a cut, as a float, for reporting only.
+///
+/// The cut is stated as `a . x >= b`, so the violation is `b - a . x` where
+/// that is positive. Computed from the exact terms and then rounded once, at
+/// the end, because rounding each product would be measuring something else.
+fn violation_at(entry: &Entry, point: &[Rational]) -> f64 {
+    let mut total = Rational::zero();
+    for (column, coefficient) in &entry.coefficients {
+        if let Some(value) = point.get(*column) {
+            total = total.add(&coefficient.mul(value));
+        }
+    }
+    let slack = entry.right.sub(&total);
+    if slack.is_positive() {
+        slack.to_binary64()
+    } else {
+        0.0
     }
 }
 

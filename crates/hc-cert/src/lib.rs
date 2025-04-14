@@ -27,3 +27,4 @@ pub mod hcc;
 pub mod lp;
 pub mod mip;
 pub mod read;
+pub mod trace;

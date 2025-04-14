@@ -93,6 +93,12 @@ pub enum Command {
         instance: String,
         /// Which format's rules the instance is read under.
         shape: Shape,
+        /// Whether to draw the proof tree.
+        tree: bool,
+        /// Whether to list the proof records the certificate carries.
+        proof: bool,
+        /// Where to write the trace of the run, when one is asked for.
+        trace: Option<String>,
     },
     /// Print the trust-boundary receipt for a verifier source tree.
     Receipt {
@@ -111,7 +117,7 @@ usage:
                       [--no-cuts]
   hc verify <certificate> --instance <file>
   hc check <instance> [--format <name>]
-  hc explain <instance> [--format <name>]
+  hc explain <instance> [--format <name>] [--tree] [--proof] [--trace <file>]
   hc receipt [<verifier crate directory>]
   hc --version
 
@@ -124,9 +130,11 @@ solve   reads an instance, solves it, rebuilds the result exactly, and has the
         independent verifier recheck the certificate before reporting a status.
 verify  runs that verifier alone, which is what a release script does.
 check   prints the canonical form of an instance and nothing else.
-explain solves, certifies, verifies, and prints the proof tree the certificate
-        contains. Every line of it comes from the certificate, so a line is
-        something the verifier checked.
+explain solves, certifies, verifies, and prints what the certificate contains:
+        --tree draws the proof tree, --proof lists the records it is made of,
+        and naming neither prints both. Every line comes from the certificate,
+        so a line is something the verifier checked. --trace writes the trace
+        of that run, which is what happened rather than what was proved.
 receipt measures the trusted base: files, counted lines, source hash,
         declared dependencies, and uses of unsafe code.
 ";
@@ -146,16 +154,73 @@ pub fn parse(arguments: &[String]) -> Option<Command> {
             [root] if !root.starts_with('-') => Some(Command::Receipt { root: root.clone() }),
             _ => None,
         },
-        "explain" => {
-            let (instance, shape) = one_file(rest)?;
-            Some(Command::Explain { instance, shape })
-        }
+        "explain" => explain(rest),
         "check" => {
             let (instance, shape) = one_file(rest)?;
             Some(Command::Check { instance, shape })
         }
         _ => None,
     }
+}
+
+fn explain(arguments: &[String]) -> Option<Command> {
+    let mut instance = None;
+    let mut shape = None;
+    let mut tree = false;
+    let mut proof = false;
+    let mut trace = None;
+    let mut index = 0;
+    while index < arguments.len() {
+        match arguments[index].as_str() {
+            "--format" => {
+                if shape.is_some() {
+                    return None;
+                }
+                shape = Some(Shape::named(arguments.get(index + 1)?)?);
+                index += 2;
+            }
+            "--tree" => {
+                if tree {
+                    return None;
+                }
+                tree = true;
+                index += 1;
+            }
+            "--proof" => {
+                if proof {
+                    return None;
+                }
+                proof = true;
+                index += 1;
+            }
+            "--trace" => {
+                if trace.is_some() {
+                    return None;
+                }
+                trace = Some(arguments.get(index + 1)?.clone());
+                index += 2;
+            }
+            other if other.starts_with('-') => return None,
+            other if instance.is_none() => {
+                instance = Some(other.to_owned());
+                index += 1;
+            }
+            _ => return None,
+        }
+    }
+    // Neither part named means both, which is what the subcommand did before
+    // either flag existed and what somebody who asks for an explanation wants.
+    if !tree && !proof {
+        tree = true;
+        proof = true;
+    }
+    Some(Command::Explain {
+        instance: instance?,
+        shape: shape.unwrap_or_default(),
+        tree,
+        proof,
+        trace,
+    })
 }
 
 /// Reads a subcommand that takes one instance file and an optional format.
@@ -444,16 +509,48 @@ mod tests {
     }
 
     #[test]
-    fn explain_takes_one_instance_and_nothing_else() {
+    fn explain_prints_both_halves_unless_one_is_named() {
+        // Naming neither is what the subcommand did before either flag
+        // existed, and is what somebody asking for an explanation wants.
         assert_eq!(
             parse(&words(&["explain", "m.mps"])),
             Some(Command::Explain {
                 instance: "m.mps".to_owned(),
                 shape: Shape::MpsFixed,
+                tree: true,
+                proof: true,
+                trace: None,
+            })
+        );
+        assert_eq!(
+            parse(&words(&["explain", "m.mps", "--tree"])),
+            Some(Command::Explain {
+                instance: "m.mps".to_owned(),
+                shape: Shape::MpsFixed,
+                tree: true,
+                proof: false,
+                trace: None,
+            })
+        );
+        assert_eq!(
+            parse(&words(&[
+                "explain", "m.mps", "--proof", "--trace", "run.hct"
+            ])),
+            Some(Command::Explain {
+                instance: "m.mps".to_owned(),
+                shape: Shape::MpsFixed,
+                tree: false,
+                proof: true,
+                trace: Some("run.hct".to_owned()),
             })
         );
         assert_eq!(parse(&words(&["explain"])), None);
-        assert_eq!(parse(&words(&["explain", "m.mps", "--tree"])), None);
+        assert_eq!(
+            parse(&words(&["explain", "m.mps", "--tree", "--tree"])),
+            None
+        );
+        assert_eq!(parse(&words(&["explain", "m.mps", "--trace"])), None);
+        assert_eq!(parse(&words(&["explain", "m.mps", "--wat"])), None);
     }
 
     #[test]
@@ -473,13 +570,12 @@ mod tests {
                     shape,
                 })
             );
-            assert_eq!(
-                parse(&words(&["explain", "--format", word, "m.txt"])),
-                Some(Command::Explain {
-                    instance: "m.txt".to_owned(),
-                    shape,
-                })
-            );
+            let Some(Command::Explain { shape: named, .. }) =
+                parse(&words(&["explain", "--format", word, "m.txt"]))
+            else {
+                panic!("explain did not take --format {word}");
+            };
+            assert_eq!(named, shape);
             let Some(Command::Solve { shape: found, .. }) =
                 parse(&words(&["solve", "m.txt", "--format", word]))
             else {

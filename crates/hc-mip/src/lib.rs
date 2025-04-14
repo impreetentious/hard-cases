@@ -31,5 +31,5 @@ pub mod tree;
 
 pub use branching::{Branching, Pseudocosts};
 pub use incumbent::{Incumbent, extend, screen};
-pub use search::{Attempt, Ending, Node, Options, Search, run};
+pub use search::{Attempt, Ending, Node, Options, Search, Spent, run};
 pub use tree::{Assumption, Tree};
