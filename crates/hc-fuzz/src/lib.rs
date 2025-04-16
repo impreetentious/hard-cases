@@ -32,6 +32,7 @@ pub mod edits;
 pub mod parsers;
 pub mod proofs;
 pub mod shapes;
+pub mod solver;
 
 use core::fmt;
 

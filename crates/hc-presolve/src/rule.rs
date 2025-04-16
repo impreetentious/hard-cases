@@ -227,6 +227,17 @@ fn fixed_column(draft: &mut Draft, column: usize, value: &Rational) -> Result<()
 #[must_use]
 pub fn empty_column_value(variable: &Variable) -> Option<Rational> {
     let (low, high) = variable.effective_bounds();
+    // A column whose bounds cross has no value to rest at, and picking the
+    // nearer endpoint would put a point outside its own bounds into a
+    // certificate. The model is infeasible and saying so is the search's job:
+    // this rule declines, the column stays, and the relaxation reports what it
+    // is. Reaching for an endpoint here is how a reduction produces an answer
+    // to a question nobody can answer.
+    if let (Some(low), Some(high)) = (low.as_ref(), high.as_ref()) {
+        if low.cmp_value(high).is_gt() {
+            return None;
+        }
+    }
     let zero = Rational::zero();
     let inside = low
         .as_ref()

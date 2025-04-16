@@ -46,9 +46,10 @@ jobs:
       # The two simplex methods against each other on generated instances.
       - run: cargo test --release -p hc-bench --test dual_campaign -- --ignored
       # The fuzz corpus at its nightly size: a million generated and mutated
-      # files through both readers, and damaged certificates through the
-      # verifier. Every case comes from a seed, so a finding here reproduces on
-      # a laptop by running the seed it names.
+      # files through both readers, damaged certificates through the verifier,
+      # and generated instances solved, certified, and rechecked. Every case
+      # comes from a seed, so a finding here reproduces on a laptop by running
+      # the seed it names.
       - run: cargo run --release -p hc-fuzz --bin hc-fuzz -- --nightly
       # Every combination of the search's settings, on every instance, against
       # enumeration and against a verified certificate.

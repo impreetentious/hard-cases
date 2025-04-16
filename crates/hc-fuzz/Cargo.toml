@@ -19,6 +19,7 @@ hc-verify = { path = "../hc-verify" }
 hc-cert = { path = "../hc-cert" }
 hc-lp = { path = "../hc-lp" }
 hc-mip = { path = "../hc-mip" }
+hc-presolve = { path = "../hc-presolve" }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -7,7 +7,7 @@
 
 use hc_fuzz::edits::{Edit, apply};
 use hc_fuzz::shapes::{Shape, draft, render};
-use hc_fuzz::{Budget, parsers, proofs};
+use hc_fuzz::{Budget, parsers, proofs, solver};
 
 #[test]
 fn the_parser_targets_are_clean_at_the_budget_a_change_pays() {
@@ -29,12 +29,26 @@ fn the_proof_target_is_clean_at_the_budget_a_change_pays() {
 }
 
 #[test]
+fn the_solver_target_is_clean_at_the_budget_a_change_pays() {
+    // A smaller budget in seeds than the parser target pays, because each case
+    // here is a solve rather than a parse: two searches, a reduction, two
+    // certificates, and two independent verifications.
+    let report = solver::campaign(Budget { from: 1, cases: 60 });
+    assert!(report.accepted > 0, "nothing was solved at all");
+    assert!(report.clean(), "{}", render_findings(&report));
+}
+
+#[test]
 #[ignore = "the nightly budget; run it with --ignored"]
 fn the_targets_are_clean_at_the_budget_the_nightly_pays() {
     let mut report = parsers::campaign(Budget::NIGHTLY);
     report.absorb(proofs::campaign(Budget {
         from: 1,
         cases: 2_000,
+    }));
+    report.absorb(solver::campaign(Budget {
+        from: 1,
+        cases: 4_000,
     }));
     assert!(report.clean(), "{}", render_findings(&report));
 }

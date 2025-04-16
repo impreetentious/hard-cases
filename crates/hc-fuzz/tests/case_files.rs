@@ -13,7 +13,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use hc_fuzz::{Budget, parsers, proofs};
+use hc_fuzz::{Budget, parsers, proofs, solver};
 
 /// The fields every case file opens with.
 const FIELDS: [&str; 6] = [
@@ -148,6 +148,7 @@ fn every_seed_a_case_file_names_is_clean_now() {
         };
         let mut report = parsers::campaign(budget);
         report.absorb(proofs::campaign(budget));
+        report.absorb(solver::campaign(budget));
         assert!(
             report.clean(),
             "{name} names seed {seed}, which is a finding again:\n{}",

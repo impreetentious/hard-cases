@@ -323,6 +323,14 @@ pub fn derived_bound(
 #[must_use]
 pub fn empty_value(column: &Column) -> Option<Frac> {
     let (low, high) = effective(column);
+    // A column whose bounds cross has no value to rest at. Choosing the nearer
+    // endpoint would accept a reduction that puts a point outside its own
+    // bounds, which is a rule this side must refuse whoever wrote it.
+    if let (Some(low), Some(high)) = (low.as_ref(), high.as_ref()) {
+        if low.compare(high) == core::cmp::Ordering::Greater {
+            return None;
+        }
+    }
     let zero = Frac::zero();
     let inside = low
         .as_ref()

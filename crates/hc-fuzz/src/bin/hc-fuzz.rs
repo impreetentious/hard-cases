@@ -4,7 +4,7 @@
 //! exits nonzero if they found anything. Everything that can be wrong lives in
 //! the library, where the tests can reach it.
 
-use hc_fuzz::{Budget, parsers, proofs};
+use hc_fuzz::{Budget, parsers, proofs, solver};
 
 fn main() -> std::process::ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
@@ -24,6 +24,7 @@ fn main() -> std::process::ExitCode {
 
     let mut report = parsers::campaign(budget);
     report.absorb(proofs::campaign(budget));
+    report.absorb(solver::campaign(budget));
     println!("fuzz: {}", report.line());
     for finding in &report.findings {
         print!("{finding}");
