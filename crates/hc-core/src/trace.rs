@@ -104,7 +104,7 @@ pub enum Event {
     /// The linear search moved up its escalation ladder.
     Escalation { stage: u8 },
     /// A certificate was assembled.
-    ProofAssembled { bytes: u64 },
+    ProofAssembled { bytes: u64, checksum: u64 },
     /// The independent verifier answered.
     VerifyResult {
         accepted: bool,
@@ -195,12 +195,28 @@ impl core::error::Error for TraceError {}
 /// A whole trace.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Trace {
+    /// The digest of the instance the run was about.
+    ///
+    /// The same one the certificate of that run carries. It is what makes a
+    /// trace a trace *of something*: without it a trace is a list of nodes
+    /// with no way to tell which problem they belong to, and anything
+    /// rendering one would be free to draw it beside any instance at all.
+    pub instance: [u8; 32],
     /// The events, in the order they happened.
     pub events: Vec<Event>,
 }
 
 impl Trace {
-    /// An empty trace.
+    /// An empty trace of an instance.
+    #[must_use]
+    pub fn about(instance: [u8; 32]) -> Self {
+        Self {
+            instance,
+            events: Vec::new(),
+        }
+    }
+
+    /// An empty trace of nothing, for a caller that will fill in the digest.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -222,6 +238,7 @@ impl Trace {
         let mut out = Vec::with_capacity(64 + self.events.len() * 8);
         out.extend_from_slice(MAGIC);
         out.push(VERSION);
+        out.extend_from_slice(&self.instance);
         for event in &self.events {
             out.push(event.code());
             write_fields(&mut out, event)?;
@@ -251,6 +268,12 @@ impl Trace {
             )));
         }
         at += 1;
+        let instance: [u8; 32] = raw
+            .get(at..at + 32)
+            .ok_or_else(|| TraceError::new("the trace ends before its instance digest"))?
+            .try_into()
+            .map_err(|_| TraceError::new("a digest of the wrong width"))?;
+        at += 32;
 
         let mut events = Vec::new();
         loop {
@@ -283,7 +306,7 @@ impl Trace {
         if at + 4 != raw.len() {
             return Err(TraceError::new("content follows the trace"));
         }
-        Ok(Self { events })
+        Ok(Self { instance, events })
     }
 
     /// Renders the trace in its textual form.
@@ -294,6 +317,11 @@ impl Trace {
     pub fn render(&self) -> Result<String, TraceError> {
         let mut out = String::from("{\n");
         let _ = writeln!(out, "  \"version\": {VERSION},");
+        let _ = writeln!(
+            out,
+            "  \"instance\": \"{}\",",
+            crate::hash::hex(&self.instance)
+        );
         out.push_str("  \"events\": [\n");
         for (index, event) in self.events.iter().enumerate() {
             let comma = if index + 1 == self.events.len() {
@@ -521,7 +549,10 @@ fn write_fields(out: &mut Vec<u8>, event: &Event) -> Result<(), TraceError> {
             word(&STAGES, *stage)?;
             out.push(*stage);
         }
-        Event::ProofAssembled { bytes } => leb(out, *bytes),
+        Event::ProofAssembled { bytes, checksum } => {
+            leb(out, *bytes);
+            leb(out, *checksum);
+        }
         Event::VerifyResult {
             accepted,
             rejection,
@@ -628,6 +659,7 @@ fn read_fields(code: u8, raw: &[u8], at: &mut usize) -> Result<Event, TraceError
         }
         16 => Event::ProofAssembled {
             bytes: read_leb(raw, at)?,
+            checksum: read_leb(raw, at)?,
         },
         17 => {
             let accepted = match byte(at)? {
@@ -739,7 +771,9 @@ fn text_fields(event: &Event) -> Result<String, TraceError> {
         Event::Escalation { stage } => {
             format!(", \"stage\": {}", quoted(word(&STAGES, *stage)?))
         }
-        Event::ProofAssembled { bytes } => format!(", \"bytes\": {bytes}"),
+        Event::ProofAssembled { bytes, checksum } => {
+            format!(", \"bytes\": {bytes}, \"checksum\": {checksum}")
+        }
         Event::VerifyResult {
             accepted,
             rejection,
@@ -763,6 +797,7 @@ mod tests {
 
     fn sample() -> Trace {
         Trace {
+            instance: [7; 32],
             events: vec![
                 Event::TransformApplied {
                     rule: 3,
@@ -789,6 +824,10 @@ mod tests {
                 },
                 Event::CertifyBlocked { node: 4, reason: 1 },
                 Event::Escalation { stage: 3 },
+                Event::ProofAssembled {
+                    bytes: 160,
+                    checksum: 3_838_920_469,
+                },
                 Event::VerifyResult {
                     accepted: false,
                     rejection: Some("HCC-DUAL-03".to_owned()),
@@ -829,6 +868,7 @@ mod tests {
     #[test]
     fn an_absent_rejection_is_null_rather_than_an_empty_string() {
         let trace = Trace {
+            instance: [0; 32],
             events: vec![Event::VerifyResult {
                 accepted: true,
                 rejection: None,
@@ -880,6 +920,7 @@ mod tests {
         // not recognise would be reporting a search that did not happen.
         let mut raw = Vec::from(MAGIC.as_slice());
         raw.push(VERSION);
+        raw.extend_from_slice(&[0; 32]);
         raw.push(200);
         let refusal = Trace::decode(&raw).expect_err("an unknown kind");
         assert!(
@@ -891,6 +932,7 @@ mod tests {
     #[test]
     fn a_word_outside_its_list_is_refused_on_both_sides() {
         let trace = Trace {
+            instance: [0; 32],
             events: vec![Event::Terminal { status: 99 }],
         };
         assert!(trace.encode().is_err(), "an unlisted word was written");
@@ -898,6 +940,7 @@ mod tests {
 
         let mut raw = Vec::from(MAGIC.as_slice());
         raw.push(VERSION);
+        raw.extend_from_slice(&[0; 32]);
         raw.extend_from_slice(&[18, 99]);
         assert!(Trace::decode(&raw).is_err(), "an unlisted word was read");
     }
@@ -906,6 +949,7 @@ mod tests {
     fn a_float_that_is_not_finite_is_a_defect_rather_than_a_value() {
         for value in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
             let trace = Trace {
+                instance: [0; 32],
                 events: vec![Event::SearchGap {
                     lower: value,
                     upper: 0.0,
@@ -921,7 +965,7 @@ mod tests {
         // The count sits between the terminator byte and the checksum, so it
         // is four from the end for a one-byte count.
         let at = raw.len() - 5;
-        assert_eq!(raw[at], 9, "the sample no longer has nine events");
+        assert_eq!(raw[at], 10, "the sample no longer has ten events");
         raw[at] = 8;
         assert!(Trace::decode(&raw).is_err());
     }
@@ -987,7 +1031,10 @@ mod tests {
                 gap: String::new(),
             },
             Event::Escalation { stage: 0 },
-            Event::ProofAssembled { bytes: 0 },
+            Event::ProofAssembled {
+                bytes: 0,
+                checksum: 0,
+            },
             Event::VerifyResult {
                 accepted: false,
                 rejection: None,
@@ -1008,6 +1055,7 @@ mod tests {
         // And every one of them round-trips, which is what makes the list
         // closed rather than merely written down.
         let trace = Trace {
+            instance: [3; 32],
             events: all.to_vec(),
         };
         let raw = trace.encode().expect("writable");

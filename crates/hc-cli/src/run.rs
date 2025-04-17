@@ -375,10 +375,11 @@ pub fn explain(instance_name: &str, raw: &[u8], asked: &Explanation) -> Explaine
 
     let trace = asked.trace.then(|| {
         let assembled_trace = trace_of(&TraceRun {
+            instance: *model.digest(),
             chain: Some(&chain),
             search: &search,
             certificate: Some(&assembled),
-            bytes: Some(bytes.len() as u64),
+            proof: Some(&bytes),
             verdict: Some(TraceVerdict {
                 accepted: true,
                 rejection: None,

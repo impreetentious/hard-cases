@@ -126,10 +126,11 @@ fn one(seed: u64, what: &str, text: &str, model: &Model) -> Result<(), Finding> 
         }
 
         let trace = trace_of(&Run {
+            instance: *model.digest(),
             chain: None,
             search: &found,
             certificate: Some(certificate),
-            bytes: Some(bytes.len() as u64),
+            proof: Some(&bytes),
             verdict: None,
             status: status_of(found.ending, found.incumbent.is_some()),
         });

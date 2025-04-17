@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "instance": "b4e79af6380a28d64f5664980bb3d252b7d45ce527ddc7eeeab2e0db160dce8d",
   "events": [
     {"kind": "root_lp", "iterations": 1, "objective": -4.0},
     {"kind": "node_open", "node": 0, "parent": 0, "depth": 0},
@@ -8,7 +9,7 @@
     {"kind": "incumbent", "objective": "-4", "source": "node"},
     {"kind": "certify_start"},
     {"kind": "certify_complete", "lower": "-4", "upper": "-4", "gap": "0"},
-    {"kind": "proof_assembled", "bytes": 160},
+    {"kind": "proof_assembled", "bytes": 160, "checksum": 3838920469},
     {"kind": "verify_result", "accepted": true, "rejection": null, "work": 473},
     {"kind": "terminal", "status": "optimal"}
   ]

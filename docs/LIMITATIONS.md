@@ -174,6 +174,23 @@ model is refused rather than approximated, and the JSON schema — which quotes
 names and carries every value as text — is the one that can usually still take
 it.
 
+## What a trace is, and is not
+
+A trace is what the search did. It is not a proof and it never becomes one: a
+reader learns which nodes were opened and in what order, which cuts entered the
+pool, where the incumbent came from, and learns nothing about whether the answer
+is right. The certificate is the only thing that says that.
+
+Everything in a trace comes from something the run recorded. An event the
+assembler cannot source is an event it does not write, and a schema field it has
+no value for is a reason not to write that event at all — so a trace is short
+where a run was, and no panel reading one can draw a number nobody measured.
+
+The escalation events the schema reserves are not produced yet: the linear
+search counts its escalations but does not record which rung each one reached,
+so nothing here can say. The schema carries the event because the rung has a
+name and a place; the assembler writes none until the search keeps them.
+
 ## What the determinism gate compares
 
 Every artifact is produced twice, in two separate processes, and compared byte

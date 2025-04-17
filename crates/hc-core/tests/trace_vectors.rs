@@ -28,6 +28,11 @@ fn bytes() -> Vec<u8> {
 /// The trace the annotation describes, written out here by hand.
 fn expected() -> Trace {
     Trace {
+        instance: [
+            0xb4, 0xe7, 0x9a, 0xf6, 0x38, 0x0a, 0x28, 0xd6, 0x4f, 0x56, 0x64, 0x98, 0x0b, 0xb3,
+            0xd2, 0x52, 0xb7, 0xd4, 0x5c, 0xe5, 0x27, 0xdd, 0xc7, 0xee, 0xea, 0xb2, 0xe0, 0xdb,
+            0x16, 0x0d, 0xce, 0x8d,
+        ],
         events: vec![
             Event::RootLp {
                 iterations: 1,
@@ -57,7 +62,10 @@ fn expected() -> Trace {
                 upper: "-4".to_owned(),
                 gap: "0".to_owned(),
             },
-            Event::ProofAssembled { bytes: 160 },
+            Event::ProofAssembled {
+                bytes: 160,
+                checksum: 3_838_920_469,
+            },
             Event::VerifyResult {
                 accepted: true,
                 rejection: None,
@@ -93,6 +101,27 @@ fn the_encoder_reproduces_the_frozen_bytes() {
 fn the_textual_form_is_a_rendering_of_the_same_events() {
     let read = Trace::decode(&bytes()).expect("a trace");
     assert_eq!(read.render().expect("renderable"), TEXT);
+}
+
+#[test]
+fn the_trace_is_bound_to_the_instance_it_is_about() {
+    // The digest in the header is the one the instance vector beside it is
+    // pinned at, and the same one the certificate of that run carries. A trace
+    // that could not be tied to a problem could be drawn beside any of them.
+    let read = Trace::decode(&bytes()).expect("a trace");
+    assert_eq!(
+        hc_core::hex(&read.instance),
+        "b4e79af6380a28d64f5664980bb3d252b7d45ce527ddc7eeeab2e0db160dce8d"
+    );
+    assert_eq!(
+        hc_core::hex(&hc_core::instance_digest(
+            hc_core::FormatTag::MpsFixed.byte(),
+            include_bytes!("../../../spec/v1/vectors/mps/tiny.mps")
+        )),
+        hc_core::hex(&read.instance),
+        "the trace names an instance other than the one it says it ran"
+    );
+    assert!(TEXT.contains("\"instance\": \"b4e79af6"));
 }
 
 #[test]

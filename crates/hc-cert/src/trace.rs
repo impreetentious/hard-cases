@@ -42,14 +42,20 @@ pub struct Verdict {
 
 /// Everything a trace is assembled from.
 pub struct Run<'a> {
+    /// The digest of the instance the run was about.
+    pub instance: [u8; 32],
     /// The reduction chain, when presolve ran.
     pub chain: Option<&'a Chain>,
     /// The search.
     pub search: &'a Search,
     /// The certificate, when one was assembled.
     pub certificate: Option<&'a Certificate>,
-    /// The certificate's length in bytes, when one was written.
-    pub bytes: Option<u64>,
+    /// The certificate as it was encoded, when one was.
+    ///
+    /// The bytes rather than their length, because the trace records the
+    /// checksum the certificate carries as well as its size, and deriving both
+    /// from the same bytes is what keeps them from drifting apart.
+    pub proof: Option<&'a [u8]>,
     /// What the verifier said, when it was asked.
     pub verdict: Option<Verdict>,
     /// The claim word the run ended on, from the closed status list.
@@ -59,7 +65,7 @@ pub struct Run<'a> {
 /// Assembles the trace of one run.
 #[must_use]
 pub fn of(run: &Run<'_>) -> Trace {
-    let mut trace = Trace::new();
+    let mut trace = Trace::about(run.instance);
 
     // The transforms, from the certificate rather than from the chain. Both
     // record the same reductions, and the certificate's are the ones a
@@ -152,8 +158,18 @@ pub fn of(run: &Run<'_>) -> Trace {
         }
     }
 
-    if let Some(bytes) = run.bytes {
-        trace.push(Event::ProofAssembled { bytes });
+    if let Some(proof) = run.proof {
+        trace.push(Event::ProofAssembled {
+            bytes: proof.len() as u64,
+            // The checksum the certificate carries in its own terminating
+            // record, which is its last four bytes.
+            checksum: u64::from(u32::from_le_bytes(
+                proof
+                    .get(proof.len().saturating_sub(4)..)
+                    .and_then(|tail| tail.try_into().ok())
+                    .unwrap_or([0; 4]),
+            )),
+        });
     }
     if let Some(verdict) = &run.verdict {
         trace.push(Event::VerifyResult {

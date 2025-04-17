@@ -18,7 +18,8 @@ The closed list of trace events, their fields, and the two encodings a trace is 
 ## `[binary]`
 
 - **magic** — HCT1
-- **header** — The magic, then the schema version as one byte.
+- **header** — The magic, the schema version as one byte, then the thirty-two bytes of the instance digest.
+- **binding** — The digest is the same one the certificate of that run carries, and is what makes a trace a trace *of something*. Without it a trace is a list of nodes with no way to tell which problem they belong to, and the situation room would be free to draw it beside any instance at all. A consumer holding a trace and a certificate compares the two digests before it renders either.
 - **record** — One byte naming the event kind, then its fields in the order this document lists them. There is no length prefix on a record: the kind determines the fields, and a consumer that cannot determine them cannot skip them either.
 - **end** — The final record is End: the number of events before it as a count, then the reflected Castagnoli checksum of every byte from the magic through that count, as four bytes little-endian. The checksum is transport corruption detection and is never proof of anything.
 - **order** — Events appear in the order they happened. A trace is compared byte for byte between two runs of the same solve, so any ordering that depended on iteration over an unordered container would break the comparison rather than merely look untidy.
@@ -210,7 +211,8 @@ The closed list of trace events, their fields, and the two encodings a trace is 
 - **code** — 16
 - **fields** —
   - bytes: count
-- **covers** — A certificate was assembled, and how large it is.
+  - checksum: count
+- **covers** — A certificate was assembled, how large it is, and the checksum it carries in its own terminating record. The two together name the certificate file the rest of this trace is about, so a proof and a trace can be shown to belong to each other rather than merely to have arrived together.
 
 ## `[event.verify_result]`
 

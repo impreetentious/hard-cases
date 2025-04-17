@@ -5,6 +5,7 @@
 //! in the order they happened. A trace that agreed with a fixture but not with
 //! its run would be exactly the artifact the no-facade rule forbids.
 
+use hc_cert::hcc::Certificate;
 use hc_cert::mip::assemble_mip;
 use hc_cert::trace::{Run, Verdict, of, status_of};
 use hc_core::trace::{Event, STATUSES, Trace};
@@ -35,29 +36,25 @@ fn traced(raw: &[u8], cuts: usize) -> (Trace, hc_mip::search::Search) {
         },
     );
     let assembled = assemble_mip(&model, raw, &found).ok();
-    let bytes = assembled.as_ref().map(|certificate| {
-        let encoded = certificate.encode();
-        (encoded.len() as u64, encoded)
+    let bytes = assembled.as_ref().map(Certificate::encode);
+    let verdict = bytes.as_ref().map(|encoded| match verify(encoded, raw) {
+        Ok(_) => Verdict {
+            accepted: true,
+            rejection: None,
+            work: 0,
+        },
+        Err(refusal) => Verdict {
+            accepted: false,
+            rejection: Some(refusal.code.text().to_owned()),
+            work: 0,
+        },
     });
-    let verdict = bytes
-        .as_ref()
-        .map(|(_, encoded)| match verify(encoded, raw) {
-            Ok(_) => Verdict {
-                accepted: true,
-                rejection: None,
-                work: 0,
-            },
-            Err(refusal) => Verdict {
-                accepted: false,
-                rejection: Some(refusal.code.text().to_owned()),
-                work: 0,
-            },
-        });
     let trace = of(&Run {
+        instance: *model.digest(),
         chain: None,
         search: &found,
         certificate: assembled.as_ref(),
-        bytes: bytes.as_ref().map(|(length, _)| *length),
+        proof: bytes.as_deref(),
         verdict,
         status: status_of(found.ending, found.incumbent.is_some()),
     });
@@ -197,10 +194,11 @@ fn an_open_node_reaches_the_trace_as_a_node_that_blocked_certification() {
         },
     );
     let trace = of(&Run {
+        instance: *model.digest(),
         chain: None,
         search: &found,
         certificate: None,
-        bytes: None,
+        proof: None,
         verdict: None,
         status: status_of(found.ending, found.incumbent.is_some()),
     });
@@ -240,6 +238,35 @@ fn the_same_solve_traces_the_same_bytes_twice() {
             second.render().expect("renderable")
         );
     }
+}
+
+#[test]
+fn a_trace_names_the_instance_and_the_certificate_it_belongs_to() {
+    // The link that makes a trace a trace of something. The digest is the
+    // instance's, and the length and checksum name the certificate file, so a
+    // consumer holding both can tell whether they are about the same run.
+    let model = parse(TINY);
+    let (trace, _) = traced(TINY, 0);
+    assert_eq!(trace.instance, *model.digest());
+
+    let found = search(&model, &Options::default());
+    let certificate = assemble_mip(&model, TINY, &found).expect("a certificate");
+    let encoded = certificate.encode();
+    let reported = trace
+        .events
+        .iter()
+        .find_map(|event| match event {
+            Event::ProofAssembled { bytes, checksum } => Some((*bytes, *checksum)),
+            _ => None,
+        })
+        .expect("a certificate was assembled");
+    assert_eq!(reported.0, encoded.len() as u64);
+    assert_eq!(
+        reported.1,
+        u64::from(u32::from_le_bytes(
+            encoded[encoded.len() - 4..].try_into().expect("four bytes")
+        ))
+    );
 }
 
 #[test]

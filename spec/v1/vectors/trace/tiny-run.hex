@@ -19,12 +19,19 @@
 # text, which is the distinction the whole schema is built around.
 #
 # Every byte is annotated. Whitespace and comment lines are not part of the
-# vector; strip them and the remaining 66 bytes are the file.
+# vector; strip them and the remaining 103 bytes are the file.
 
-# --- header, 5 bytes ------------------------------------------------------
+# --- header, 37 bytes -----------------------------------------------------
 
 48 43 54 31              # magic, "HCT1"
 01                       # schema version 1
+                         # the instance digest, which is the same one the
+                         # certificate of this run carries. It is what makes
+                         # this a trace *of something*.
+b4 e7 9a f6 38 0a 28 d6
+4f 56 64 98 0b b3 d2 52
+b7 d4 5c e5 27 dd c7 ee
+ea b2 e0 db 16 0d ce 8d
 
 # --- the root relaxation, 10 bytes ----------------------------------------
 
@@ -67,10 +74,13 @@
 02 2d 34                 # upper bound "-4"
 01 30                    # gap "0"
 
-# --- the certificate and its verdict, 8 bytes -----------------------------
+# --- the certificate and its verdict, 13 bytes ----------------------------
 
 10                       # proof_assembled
 a0 01                    # 160 bytes, two-byte variable-length integer
+95 8e c5 a6 0e           # the checksum the certificate carries in its own
+                         # terminating record. With the length above it names
+                         # the certificate file this trace is about.
 11                       # verify_result
 01                       # accepted
 00                       # no rejection identifier: a length of zero
@@ -85,6 +95,6 @@ d9 03                    # 473 verifier work units
 
 ff                       # end
 0a                       # ten events before it
-48 b9 41 01              # reflected Castagnoli checksum of the 62 bytes above,
+c1 da 91 1c              # reflected Castagnoli checksum of the 99 bytes above,
                          # little endian. Transport corruption detection, never
                          # proof of anything.
