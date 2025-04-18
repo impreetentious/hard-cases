@@ -174,6 +174,29 @@ if [[ -d crates/hc-verify ]]; then
   fi
 fi
 
+# Unsafe code has exactly one home. The workspace forbids it and one crate
+# allows it back, because a C interface means raw pointers; the exemption is
+# worth only as much as its narrowness, so it is checked in both directions.
+# A second crate allowing it is a failure, and the exempted crate no longer
+# allowing it means the exemption is covering nothing and is also a failure.
+allowed="$(grep -rl 'unsafe_code = "allow"' crates/*/Cargo.toml 2>/dev/null || true)"
+if [[ "$allowed" != "crates/hc-wasm/Cargo.toml" ]]; then
+  echo "forbidden: unsafe code is allowed in an unexpected set of crates"
+  echo "  expected exactly crates/hc-wasm/Cargo.toml, found: ${allowed:-nothing}"
+  status=1
+fi
+# And the price of it: the unsafe blocks in that crate stay in the one file
+# that has the C interface in it.
+if [[ -d crates/hc-wasm ]]; then
+  spread="$(grep -rln 'unsafe ' --include='*.rs' crates/hc-wasm/src 2>/dev/null \
+    | grep -vE '^crates/hc-wasm/src/exports\.rs$' || true)"
+  if [[ -n "$spread" ]]; then
+    echo "forbidden: unsafe code outside the browser surface's interface file"
+    echo "$spread" | sed 's/^/  /'
+    status=1
+  fi
+fi
+
 # The reference solver is the oracle the production search is checked against.
 # An oracle that imports the code it checks agrees with it exactly where
 # agreement is worthless, so the reference module may not reach for the

@@ -14,10 +14,11 @@ members = [
     "crates/hc-mip",
     "crates/hc-presolve",
     "crates/hc-verify",
+    "crates/hc-wasm",
 ]
 
 [workspace.package]
-version = "0.12.0"
+version = "0.12.1"
 authors = ["Sidakpreet Singh"]
 edition = "2024"
 license = "MIT"

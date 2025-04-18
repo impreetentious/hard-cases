@@ -2,3 +2,8 @@
 channel = "1.85.0"
 profile = "minimal"
 components = ["rustfmt", "clippy"]
+# The browser surface is one of the three platforms this project claims, so the
+# target it needs is declared here rather than installed by hand on whichever
+# machine happens to build it. A platform nobody can build for is a platform
+# nobody is testing.
+targets = ["wasm32-unknown-unknown"]

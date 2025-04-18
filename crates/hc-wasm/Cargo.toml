@@ -1,0 +1,40 @@
+[package]
+name = "hc-wasm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# A dynamic library with a C interface. There is no binding generator here and
+# no glue crate: the exports below are plain functions over a pointer and a
+# length, and the page that calls them reads the answers out of the module's
+# own memory. That is a few dozen lines of JavaScript and no dependency at all,
+# which is the trade this project makes everywhere else too.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+hc-cert = { path = "../hc-cert" }
+hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
+hc-io = { path = "../hc-io" }
+hc-lp = { path = "../hc-lp" }
+hc-mip = { path = "../hc-mip" }
+hc-presolve = { path = "../hc-presolve" }
+# The verifier, compiled into the same module and reached through its public
+# interface like any other caller. It shares nothing with the solver here
+# either: the isolation is a property of the crate, not of the binary it ends
+# up in.
+hc-verify = { path = "../hc-verify" }
+
+[lints.rust]
+# The one crate that may. A C interface means raw pointers, and a raw pointer
+# means unsafe. Everything the unsafe blocks below do is turn a pointer and a
+# length the caller just received from this module back into the slice it came
+# from; there is no other use of it in the crate.
+unsafe_code = "allow"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+disallowed_types = "allow"

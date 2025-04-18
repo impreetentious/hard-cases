@@ -36,6 +36,10 @@ jobs:
       # for byte: the canonical dump, the certificate, the explanation, the
       # trace, and the verifier's verdict and work units.
       - run: ./scripts/ci/determinism.sh
+      # The browser surface, built and driven in a WebAssembly host. The target
+      # comes from rust-toolchain.toml, so a machine that cannot build it is a
+      # machine that has not been set up the way this project says it is.
+      - run: ./scripts/ci/wasm.sh
       # The certification campaign at its nightly size, under release
       # optimizations. A hundred thousand generated instances, each solved,
       # rebuilt exactly, and rechecked by the standalone verifier.

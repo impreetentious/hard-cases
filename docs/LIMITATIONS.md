@@ -174,6 +174,32 @@ model is refused rather than approximated, and the JSON schema — which quotes
 names and carries every value as text — is the one that can usually still take
 it.
 
+## What the browser surface is
+
+One WebAssembly module with three entry points: a bounded live solve, a replay
+of a recorded trace and certificate, and the verifier alone behind a thin
+wrapper. Every result says which of the first two produced it, because a panel
+that could not tell a live solve from a recording would label one as the other.
+
+A replay rechecks the certificate rather than displaying the verdict it was
+recorded with. A recorded verdict is a claim about a run nobody in the room
+performed.
+
+The verifier being compiled into the same module as the solver is not the same
+as sharing anything with it. The crate has no dependencies, its own arithmetic,
+its own parsers, and a gate that fails the build if either stops being true.
+
+There is no binding generator and no glue crate. The exports are plain
+functions over a pointer and a length, answers are UTF-8 behind their own
+length, and the page reads them out of the module's memory in about forty
+lines. Those forty lines are the ones the gate runs.
+
+**Unsafe code exists in exactly one file**, the one holding that C interface,
+and a scan fails the build if a second crate allows it or if that file stops
+being the only place it appears. Everything the unsafe blocks do is turn a
+pointer and a length the caller received from this module back into the slice
+it came from.
+
 ## What a trace is, and is not
 
 A trace is what the search did. It is not a proof and it never becomes one: a
