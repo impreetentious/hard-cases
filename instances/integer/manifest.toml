@@ -1,0 +1,68 @@
+# The committed mixed-integer corpus, version 1.
+#
+# Four instance files small enough to reason about and shaped so that the
+# search has to do the thing each one is named for: branch on binaries against
+# a knapsack, branch on a linking row that only integrality closes, split at a
+# threshold that is not zero or one, and refuse a system whose relaxation is
+# comfortable.
+#
+# This corpus exists because the mixed-integer half of the solver was proved
+# only against models a generator produced. Generated models are worth more
+# than they look — a hundred thousand of them found real defects — but they are
+# all drawn from one distribution, they are never read by a person, and none of
+# them is on the page a visitor opens. These are.
+#
+# What the objective field records is evidence, and the evidence field says
+# which kind. Three of the four are small enough that every integer assignment
+# in the box can be enumerated, so their evidence is enumeration *and* a
+# certificate an independent checker accepted. The fourth has continuous
+# columns and enumeration cannot reach it; its evidence is the certificate
+# alone, and the field says so rather than leaving a reader to assume.
+#
+# The oracle field is checked in both directions. An entry claiming enumeration
+# that turns out to be beyond it fails, and so does an entry claiming to be
+# beyond enumeration that the oracle could have walked — a corpus that let the
+# strongest available check be skipped by a typo would be a corpus that
+# silently weakened.
+
+[meta]
+version = 1
+title = 'Committed mixed-integer corpus v1'
+summary = 'Small mixed-integer instance files whose certificates a gate verifies, with the enumerated optimum beside each one that has a box.'
+form = 'free'
+
+[policy]
+enumeration = 'An entry marked exhaustive is enumerated in full over the product of its integer boxes, and the enumerated answer is compared against the solver by exact value. The comparison consults nothing the solver produced.'
+certificate = 'Every entry, enumerable or not, must assemble a certificate that the standalone verifier accepts against the original bytes.'
+cuts = 'Every entry is solved twice, with separation and without, and the two runs must agree about the value. A cut that removes a feasible integer point is what that comparison exists to catch.'
+
+[instance.knap9]
+file = 'knap9.mps'
+expect = 'optimal'
+oracle = 'exhaustive'
+objective = '-37'
+evidence = 'enumeration of all 512 assignments and a certificate the standalone verifier accepted'
+covers = 'A nine-item binary knapsack with a fractional relaxation at the root. Without separation the search branches nine times; with it, two cover cuts close the root. The one entry whose certificate carries cuts.'
+
+[instance.fixcharge6]
+file = 'fixcharge6.mps'
+expect = 'optimal'
+oracle = 'beyond'
+objective = '68'
+evidence = 'a certificate the standalone verifier accepted'
+covers = 'A fixed-charge facility model: three continuous columns each capped by a binary one. The relaxation opens a site halfway and serves half its capacity for half the cost, which is exactly what integrality forbids and what the linking rows are for.'
+
+[instance.stock3]
+file = 'stock3.mps'
+expect = 'optimal'
+oracle = 'exhaustive'
+objective = '27'
+evidence = 'enumeration of all 343 assignments and a certificate the standalone verifier accepted'
+covers = 'Three general integer columns rather than binaries, so the search splits at thresholds other than zero and one and the branch records carry an integer a reader has to look at.'
+
+[instance.parity5]
+file = 'parity5.mps'
+expect = 'infeasible'
+oracle = 'exhaustive'
+evidence = 'enumeration of all 216 assignments and a certificate the standalone verifier accepted'
+covers = 'An infeasibility the relaxation cannot see: every coefficient of the equality is even and its right-hand side is odd. Without separation the certificate is a tree whose every leaf is a contradiction; with it, one cut sees the parity and the root closes on a single one. The board reports both.'

@@ -21,7 +21,7 @@ use hc_io::{json, lp};
 use hc_lp::dual::solve_from as solve_dual;
 use hc_lp::{Basis, Effort, Options, Outcome, Problem, Working, solve};
 use hc_mip::branching::Branching;
-use hc_mip::search::{Options as MipOptions, run as search_tree};
+use hc_mip::search::{CUT_ROUNDS, Options as MipOptions, run as search_tree};
 use hc_presolve::{Chain, reduce};
 use hc_verify::vcli::{accepted, refused};
 
@@ -66,7 +66,7 @@ pub fn check(raw: &[u8], shape: Shape) -> (String, Ending) {
 }
 
 /// What a solve was asked to do.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Settings {
     /// Whether to try the dual method.
     pub dual: bool,
@@ -80,6 +80,28 @@ pub struct Settings {
     pub cuts: bool,
     /// Which format's rules the instance is read under.
     pub shape: Shape,
+}
+
+impl Default for Settings {
+    /// What the command line does when it is told nothing.
+    ///
+    /// Written out rather than derived, and that is the whole point of it.
+    /// Deriving gives every field its zero, so the derived default was a
+    /// solver with presolve and separation switched off — which is not what
+    /// this program does when a person runs it, and every caller that reached
+    /// for the default was quietly testing a different solver from the one
+    /// that ships. The flags below turn things off; this is what they turn off
+    /// from.
+    fn default() -> Self {
+        Self {
+            dual: false,
+            presolve: true,
+            solution: None,
+            simple_branching: false,
+            cuts: true,
+            shape: Shape::default(),
+        }
+    }
 }
 
 /// Reads a solution file: one exact decimal value per line, in variable order.
@@ -144,7 +166,7 @@ pub fn search(raw: &[u8], settings: &Settings) -> Result<Solved, String> {
         .as_ref()
         .and_then(|values| hc_mip::extend(&hc_lp::exact::Canonical::of(reduced), values));
     let options = MipOptions {
-        cut_rounds: if settings.cuts { 4 } else { 0 },
+        cut_rounds: if settings.cuts { CUT_ROUNDS } else { 0 },
         start,
         branching: if settings.simple_branching {
             Branching::MostFractional
@@ -346,7 +368,17 @@ pub fn explain(instance_name: &str, raw: &[u8], asked: &Explanation) -> Explaine
         Err(message) => return refuse(format!("REFUSED: {message}\n")),
     };
     let chain = reduce(&model);
-    let search = search_tree(&chain.reduced, &MipOptions::default());
+    // The same search `solve` performs. An explanation of a different run from
+    // the one this program does when asked to solve would be an explanation of
+    // nothing, and it was exactly that until a build step replayed the trace
+    // beside the certificate and found the two were about different runs.
+    let search = search_tree(
+        &chain.reduced,
+        &MipOptions {
+            cut_rounds: CUT_ROUNDS,
+            ..MipOptions::default()
+        },
+    );
     let assembled = match assemble_presolved(&model, &chain, raw, &search) {
         Ok(assembled) => assembled,
         Err(reason) => return refuse(format!("no certificate: {reason}\n")),
@@ -558,6 +590,68 @@ mod tests {
         );
         // Whichever ran, the answer is the same one.
         assert_eq!(plain.outcome.as_str(), asked.outcome.as_str());
+    }
+
+    /// A knapsack whose relaxation is fractional, so the search branches and
+    /// the separator has something to find. The frozen tiny instance closes at
+    /// the root and would agree about a certificate under any settings at all.
+    const KNAPSACK: &[u8] = include_bytes!("../../../instances/integer/knap9.mps");
+
+    #[test]
+    fn solving_and_explaining_are_the_same_run() {
+        // They were not, and nothing said so: `explain` took the bare defaults
+        // and `solve` asked for separation, so the two subcommands produced
+        // different certificates for the same file and each was internally
+        // consistent. It surfaced when a trace was replayed beside a
+        // certificate and the pair turned out to be about different runs.
+        let solved = search(
+            KNAPSACK,
+            &Settings {
+                shape: Shape::MpsFree,
+                ..Settings::default()
+            },
+        )
+        .expect("the corpus entry parses");
+        let (_, bytes, ending) = certify("knap9.mps", KNAPSACK, "knap9.hcc", &solved);
+        assert_eq!(ending, Ending::Fine);
+        let proof = bytes.expect("a certificate");
+
+        let explained = explain(
+            "knap9.mps",
+            KNAPSACK,
+            &Explanation {
+                shape: Shape::MpsFree,
+                trace: true,
+                ..Explanation::default()
+            },
+        );
+        assert_eq!(explained.ending, Ending::Fine);
+        let trace = explained.trace.expect("a trace was asked for");
+
+        // The trace records the length and the trailing checksum of the
+        // certificate its own run assembled. If the two subcommands run the
+        // same search, those are this certificate's.
+        let decoded = hc_core::trace::Trace::decode(&trace).expect("the trace reads");
+        let stated = decoded
+            .events
+            .iter()
+            .find_map(|event| match event {
+                hc_core::trace::Event::ProofAssembled { bytes, checksum } => {
+                    Some((*bytes, *checksum))
+                }
+                _ => None,
+            })
+            .expect("the explanation assembled a certificate");
+        let carried = (
+            proof.len() as u64,
+            u64::from(u32::from_le_bytes(
+                proof[proof.len() - 4..].try_into().expect("four bytes"),
+            )),
+        );
+        assert_eq!(
+            stated, carried,
+            "the explanation is of a different run from the solve"
+        );
     }
 
     #[test]

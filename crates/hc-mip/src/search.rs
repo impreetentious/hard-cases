@@ -81,9 +81,11 @@ pub struct Options {
     pub basis_cache: usize,
     /// How many rounds of cut separation to run at a node.
     ///
-    /// Zero turns cuts off entirely, which is how the search runs while the
-    /// certificate machinery for them is being built and how the campaign runs
-    /// the comparison that shows cuts change nothing about the answer.
+    /// Zero turns cuts off entirely, which is how the campaign runs the
+    /// comparison that shows cuts change nothing about the answer. The default
+    /// is zero so that a caller who has not thought about separation gets the
+    /// simplest search there is; every surface a person actually uses asks for
+    /// [`CUT_ROUNDS`] instead, and they all ask for the same one.
     pub cut_rounds: usize,
     /// How deep in the tree cuts are still separated.
     ///
@@ -166,6 +168,15 @@ impl Default for Options {
         }
     }
 }
+
+/// The separation rounds every surface a person uses runs.
+///
+/// One number in one place. The command line, the browser surface and the
+/// harness all have to be running the same solver: a page that demonstrated
+/// this solver with its separation switched off would be demonstrating a
+/// different program from the one the command line runs, and the difference
+/// would show up as a certificate with no cuts in it and nobody wondering why.
+pub const CUT_ROUNDS: usize = 4;
 
 /// What happened at one node.
 #[derive(Clone, Debug)]

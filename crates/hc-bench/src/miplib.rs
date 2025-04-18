@@ -23,7 +23,7 @@
 use hc_cert::mip::{assemble_mip, assemble_presolved};
 use hc_core::Model;
 use hc_io::mps::{Form, read};
-use hc_mip::search::{Ending, Options, run};
+use hc_mip::search::{CUT_ROUNDS, Ending, Options, run};
 use hc_presolve::reduce;
 use hc_verify::vclose::verify;
 
@@ -85,6 +85,18 @@ pub const HEADING: &str =
 /// a run means the same thing on every machine.
 #[must_use]
 pub fn run_one(name: &str, raw: &[u8], nodes: u64) -> Row {
+    run_with(name, raw, nodes, CUT_ROUNDS)
+}
+
+/// Solves one instance under a chosen number of separation rounds.
+///
+/// The board uses this to report what cuts are worth: the same instance, the
+/// same everything else, once with separation and once without. Nothing else
+/// should reach for it — a harness that ran the product's search under
+/// settings the product does not use would be reporting on another program,
+/// which is what [`run_one`] exists to prevent.
+#[must_use]
+pub fn run_with(name: &str, raw: &[u8], nodes: u64, cut_rounds: usize) -> Row {
     let model: Model = match read(raw, Form::Free) {
         Ok(model) => model,
         Err(error) => {
@@ -115,6 +127,7 @@ pub fn run_one(name: &str, raw: &[u8], nodes: u64) -> Row {
     let chain = reduce(&model);
     let options = Options {
         node_limit: nodes,
+        cut_rounds,
         ..Options::default()
     };
     let search = run(&chain.reduced, &options);
@@ -181,7 +194,7 @@ pub fn cuts_agree(name: &str, raw: &[u8], nodes: u64) -> Option<String> {
         &model,
         &Options {
             node_limit: nodes,
-            cut_rounds: 4,
+            cut_rounds: CUT_ROUNDS,
             ..Options::default()
         },
     );
