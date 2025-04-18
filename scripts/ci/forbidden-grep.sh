@@ -221,6 +221,42 @@ if [[ -d crates/hc-bench ]]; then
   fi
 fi
 
+# The forger produces certificates that are meant to be wrong. Nothing that
+# assembles a real one or checks one may reach it: a path from the assembler to
+# a mutation is a path a defect could take into a certificate somebody trusts,
+# and a path from the verifier to one would mean the checker had the forger's
+# code in it. Only the harness that runs the corpus and the browser surface
+# that offers it may depend on it, and this names them rather than allowing
+# whatever is there.
+#
+# Fail-closed both ways: if the crate has vanished the check would be vacuous,
+# and if a crate that should not have it does, the manifest says so.
+if [[ -d crates/hc-tamper ]]; then
+  forger_allowed=(hc-bench hc-wasm hc-tamper)
+  for manifest in crates/*/Cargo.toml; do
+    crate_name="$(basename "$(dirname "$manifest")")"
+    if grep -qE '^[[:space:]]*hc-tamper[[:space:]]*=' "$manifest"; then
+      permitted=0
+      for allowed in "${forger_allowed[@]}"; do
+        [[ "$crate_name" == "$allowed" ]] && permitted=1
+      done
+      if [[ $permitted -eq 0 ]]; then
+        echo "forbidden: $crate_name depends on the tamper corpus"
+        echo "  only the harness that runs it and the browser surface that offers it may"
+        status=1
+      fi
+    fi
+  done
+  if ! grep -qE '^[[:space:]]*hc-cert[[:space:]]*=' crates/hc-tamper/Cargo.toml; then
+    echo "forbidden: crates/hc-tamper does not depend on the certificate format; the check above would be about nothing"
+    status=1
+  fi
+  if grep -qE '^[[:space:]]*hc-verify[[:space:]]*=' crates/hc-tamper/Cargo.toml; then
+    echo "forbidden: the forger depends on the verifier; it must not be able to ask whether its forgeries pass"
+    status=1
+  fi
+fi
+
 if [[ $status -ne 0 ]]; then
   echo "forbidden-grep: FAILED"
   exit 1

@@ -13,10 +13,12 @@ hc-io = { path = "../hc-io" }
 # The harness drives the production solver; the reference solver beside it does
 # not, and a gate refuses the build if that ever changes.
 hc-lp = { path = "../hc-lp" }
-# The tamper corpus forges certificates, which means encoding and decoding
-# them the way the solver does. It never verifies one; that is the other
-# side's job and the whole point of the exercise.
 hc-cert = { path = "../hc-cert" }
+# The tamper corpus, which the campaign here runs against the standalone
+# verifier. It lives in its own crate because the browser surface offers the
+# same entries to a visitor and should not have to take a benchmark harness to
+# reach them.
+hc-tamper = { path = "../hc-tamper" }
 hc-cuts = { path = "../hc-cuts" }
 hc-mip = { path = "../hc-mip" }
 hc-presolve = { path = "../hc-presolve" }

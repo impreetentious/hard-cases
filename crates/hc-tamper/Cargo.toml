@@ -1,0 +1,19 @@
+[package]
+name = "hc-tamper"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# The forger decodes a genuine certificate, changes one thing, and encodes it
+# again, so it needs the format and the arithmetic and nothing else. It never
+# verifies: that is the independent side's job and the whole point of the
+# exercise.
+hc-cert = { path = "../hc-cert" }
+hc-core = { path = "../hc-core" }
+hc-exact = { path = "../hc-exact" }
+
+[lints]
+workspace = true

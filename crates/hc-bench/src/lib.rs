@@ -21,5 +21,4 @@ pub mod miplib;
 pub mod proof;
 pub mod receipt;
 pub mod ref_lp;
-pub mod tamper;
 pub mod tiny;

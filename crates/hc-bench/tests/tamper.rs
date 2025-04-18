@@ -14,7 +14,6 @@
 //! too, because a corpus entry that nothing runs is a file that looks like
 //! coverage.
 
-use hc_bench::tamper::{CASES, forge, instance_for};
 use hc_cert::assemble::assemble_lp;
 use hc_cert::mip::{assemble_mip, assemble_presolved};
 use hc_core::{SpecDocument, Tol};
@@ -22,6 +21,7 @@ use hc_io::mps::{Form, read};
 use hc_lp::{Options, Problem, Working, solve};
 use hc_mip::search::{Options as MipOptions, run as search_tree};
 use hc_presolve::reduce;
+use hc_tamper::{CASES, forge, instance_for};
 use hc_verify::vclose::verify;
 
 const MANIFEST: &str = include_str!("../../../tamper/manifest.toml");
