@@ -48,8 +48,6 @@ pub const RECORD_CAP: u64 = 20_000_000;
 pub const RATIONAL_BIT_CAP: u64 = 1_048_576;
 /// The largest rational token, in bytes.
 pub const RATIONAL_TOKEN_CAP: u64 = 262_144;
-/// The deepest tree the replay stack will hold.
-pub const DEPTH_CAP: u64 = 100_000;
 
 /// What a certificate claims.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -316,6 +314,15 @@ pub struct Proof {
     pub claim: Claim,
     /// The records, in stream order.
     pub steps: Vec<Step>,
+    /// Where each record's payload sat, as a start and an end offset into the
+    /// certificate, in the same order as `steps`.
+    ///
+    /// A reader's own bookkeeping, kept because a caller that wants to point
+    /// at the bytes a record came from otherwise has to parse the stream a
+    /// second time to find them. No rule consults it and nothing derived from
+    /// a certificate's content depends on it; removing it would change no
+    /// verdict.
+    pub spans: Vec<(usize, usize)>,
     /// How many bytes the certificate occupied.
     pub bytes: usize,
 }
@@ -371,6 +378,7 @@ pub fn read(certificate: &[u8], instance: &[u8]) -> Result<Proof, Rejected> {
         at: HEADER_BYTES,
     };
     let mut steps: Vec<Step> = Vec::new();
+    let mut spans: Vec<(usize, usize)> = Vec::new();
     let mut previous: Option<u64> = None;
     loop {
         if scan.done() {
@@ -420,6 +428,7 @@ pub fn read(certificate: &[u8], instance: &[u8]) -> Result<Proof, Rejected> {
         }
 
         steps.push(step);
+        spans.push((start, scan.at));
         if steps.len() as u64 > RECORD_CAP {
             return Err(Rejected::new(
                 Code::PARSE_RECORD_COUNT,
@@ -455,6 +464,7 @@ pub fn read(certificate: &[u8], instance: &[u8]) -> Result<Proof, Rejected> {
         claim: header.claim,
         bytes: certificate.len(),
         steps,
+        spans,
     };
     check_counts(&proof)?;
     Ok(proof)
@@ -1025,6 +1035,42 @@ mod tests {
         );
         assert_eq!(*stated_lower, None);
         assert_eq!(*stated_gap, None);
+    }
+
+    #[test]
+    fn every_record_reports_where_its_payload_sat() {
+        let stream = bytes();
+        let proof = read(&stream, INSTANCE).expect("the frozen vector is accepted");
+        assert_eq!(proof.spans.len(), proof.steps.len());
+
+        // The spans partition the stream between the header and the checksum,
+        // in order, with only each record's own type, identifier and length
+        // between one payload and the next.
+        let mut previous = HEADER_BYTES;
+        for (at, (start, end)) in proof.spans.iter().copied().enumerate() {
+            assert!(
+                start >= previous,
+                "record {at} begins before record {at} - 1 ends"
+            );
+            assert!(start <= end, "record {at} ends before it begins");
+            assert!(
+                end <= stream.len() - CHECKSUM_BYTES,
+                "record {at} runs into the checksum"
+            );
+            previous = end;
+        }
+        assert_eq!(
+            previous,
+            stream.len() - CHECKSUM_BYTES,
+            "the last payload does not end where the checksum begins"
+        );
+
+        // And a span names its own record's bytes: the dual bound's payload
+        // starts with the node it is made at, which is zero.
+        let (start, end) = proof.spans[1];
+        assert!(matches!(proof.at(1), Some(Step::DualBound { .. })));
+        assert!(end > start);
+        assert_eq!(stream[start], 0);
     }
 
     #[test]

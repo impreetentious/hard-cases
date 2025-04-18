@@ -123,4 +123,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.12.3
+**Version:** v0.12.4

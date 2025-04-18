@@ -309,40 +309,7 @@ pub fn close(work: &mut Work, proof: &Proof, model: &Instance) -> Result<Verdict
                 stated_objective.clone(),
             )?;
 
-            // A bound above the objective it is supposed to bound is not a
-            // weak proof; it is a false one, and it is the shape a sign error
-            // in the multipliers takes.
-            match work.compare(&bound.value, &upper) {
-                core::cmp::Ordering::Greater => {
-                    return Err(Rejected::new(
-                        Code::CLAIM_NOT_CLOSED,
-                        format!(
-                            "the lower bound {} exceeds the objective {upper} it bounds",
-                            bound.value
-                        ),
-                    ));
-                }
-                core::cmp::Ordering::Equal if kind == Claim::Gap => {
-                    // A gap of zero is optimality, and it has one spelling.
-                    return Err(Rejected::new(
-                        Code::CLAIM_BOUND_NOT_BELOW,
-                        format!(
-                            "the bound {} equals the objective and closes it",
-                            bound.value
-                        ),
-                    ));
-                }
-                core::cmp::Ordering::Less if kind == Claim::Optimal => {
-                    return Err(Rejected::new(
-                        Code::CLAIM_NOT_CLOSED,
-                        format!(
-                            "the bound {} is below the objective {upper}, which is a gap",
-                            bound.value
-                        ),
-                    ));
-                }
-                _ => {}
-            }
+            bound_against_witness(work, kind, &bound.value, &upper)?;
 
             if kind == Claim::Optimal {
                 return Ok(Verdict {
@@ -701,6 +668,53 @@ fn witness(
         ));
     }
     Ok(value)
+}
+
+/// How a lower bound must sit against the objective a witness attains.
+///
+/// Three orderings and three different things to say about them.
+///
+/// **Above** is the one that is not a weak proof but a false one: a bound
+/// exceeding the objective of a point that has already been checked feasible
+/// says something no sound derivation can say, and it is the shape a sign
+/// error in the multipliers takes. It is unreachable through this crate's
+/// public entry while the inference rules are correct, because the bound is
+/// recomputed from the cited inequalities rather than read — which is exactly
+/// why it is written down. A tripwire that cannot fire while everything else
+/// is right is a tripwire on everything else, and one nobody can call is one
+/// nobody can show still works. It is a function so that a test can.
+///
+/// **Equal** closes the objective, which is optimality, and optimality has one
+/// spelling. A gap claim stating a gap of zero is refused rather than accepted
+/// as a second way to write the same thing.
+///
+/// **Below** is a gap. An optimal claim that leaves one is refused as the gap
+/// claim it actually is.
+///
+/// # Errors
+///
+/// Returns the rejection the ordering earns.
+fn bound_against_witness(
+    work: &mut Work,
+    kind: Claim,
+    bound: &Frac,
+    upper: &Frac,
+) -> Result<(), Rejected> {
+    match work.compare(bound, upper) {
+        core::cmp::Ordering::Greater => Err(Rejected::new(
+            Code::CLAIM_NOT_CLOSED,
+            format!("the lower bound {bound} exceeds the objective {upper} it bounds"),
+        )),
+        core::cmp::Ordering::Equal if kind == Claim::Gap => Err(Rejected::new(
+            Code::CLAIM_BOUND_NOT_BELOW,
+            format!("the bound {bound} equals the objective and closes it"),
+        )),
+        core::cmp::Ordering::Less if kind == Claim::Optimal => Err(Rejected::new(
+            Code::CLAIM_NOT_CLOSED,
+            format!("the bound {bound} is below the objective {upper}, which is a gap"),
+        )),
+        _ => Ok(()),
+    }
 }
 
 /// Refuses a value a claim is not entitled to state.
@@ -1116,6 +1130,7 @@ mod tests {
             digest: crate::vhash::instance_digest(1, TINY),
             claim,
             bytes: 0,
+            spans: Vec::new(),
             steps,
         }
     }
@@ -1191,6 +1206,50 @@ mod tests {
         assert_eq!(refusal.code, Code::TREE_ROOT_HASH);
     }
 
+    /// A bound above the objective it bounds is refused, on every claim kind.
+    ///
+    /// The name is the one the specification uses for this invariant: the gap
+    /// is `(U - L) / max(1, |U|)`, and a negative one is not a small number but
+    /// a statement that something feasible beats a proved lower bound. The
+    /// asset says it is a rejection in the verifier, and until this test the
+    /// branch that makes it one had never been run — it cannot be reached
+    /// through `close` while the inference rules are sound, which is precisely
+    /// why it needed a caller of its own.
+    #[test]
+    fn trap_gap_never_negative() {
+        let mut work = Work::new();
+        let above = whole(-3);
+        let attained = whole(-4);
+
+        for kind in [Claim::Optimal, Claim::Gap] {
+            let refusal = bound_against_witness(&mut work, kind, &above, &attained)
+                .expect_err("a bound above the objective it bounds is false");
+            assert_eq!(refusal.code, Code::CLAIM_NOT_CLOSED);
+            assert!(
+                refusal.to_string().contains("exceeds the objective"),
+                "{refusal}"
+            );
+        }
+
+        // The other two orderings, so this test pins the whole predicate and
+        // not one arm of it.
+        assert_eq!(
+            bound_against_witness(&mut work, Claim::Gap, &attained, &attained)
+                .expect_err("a gap of zero is optimality")
+                .code,
+            Code::CLAIM_BOUND_NOT_BELOW
+        );
+        assert_eq!(
+            bound_against_witness(&mut work, Claim::Optimal, &whole(-10), &attained)
+                .expect_err("a bound short of the objective is a gap")
+                .code,
+            Code::CLAIM_NOT_CLOSED
+        );
+        // And the two that are allowed.
+        assert!(bound_against_witness(&mut work, Claim::Optimal, &attained, &attained).is_ok());
+        assert!(bound_against_witness(&mut work, Claim::Gap, &whole(-10), &attained).is_ok());
+    }
+
     #[test]
     fn an_optimal_claim_whose_bound_falls_short_is_a_gap_and_is_refused_as_one() {
         let mut steps = optimal_steps();
@@ -1258,8 +1317,10 @@ mod tests {
         assert_eq!(refusal.code, Code::CLAIM_GAP);
     }
 
+    /// The bound a record states is recomputed from the inequalities it cites,
+    /// never adopted.
     #[test]
-    fn a_gap_claim_stating_a_bound_the_combination_does_not_give_is_refused() {
+    fn trap_recompute_not_restate() {
         let steps = vec![
             root(),
             Step::DualBound {

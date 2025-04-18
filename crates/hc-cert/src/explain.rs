@@ -25,13 +25,32 @@ struct Line {
     detail: String,
 }
 
-/// Renders a certificate's tree.
+/// The label a column index is drawn with.
+///
+/// A branch record cites a column of the *reduced* model, which is the model
+/// the search was about. Its variables carry the labels the file used, so
+/// naming them is a lookup rather than a guess — and a lookup is worth doing,
+/// because `branch on x4` tells a reader who wrote the file nothing at all.
+///
+/// Absent names fall back to the index. A caller with no reduced model to hand
+/// is one that could not have named the column correctly, and inventing a name
+/// from the original file would be worse than the index: presolve removes
+/// columns, so the two coordinate systems are not the same one.
+fn label(names: &[String], column: u64) -> String {
+    usize::try_from(column)
+        .ok()
+        .and_then(|at| names.get(at))
+        .filter(|name| !name.is_empty())
+        .map_or_else(|| format!("x{column}"), Clone::clone)
+}
+
+/// Renders a certificate's tree, naming columns from the reduced model.
 ///
 /// A certificate with no tree renders its claim and nothing else, because
 /// there is nothing else in it: a linear program's proof is a bound, a point,
 /// and the statement they support.
 #[must_use]
-pub fn tree(certificate: &Certificate) -> String {
+pub fn tree(certificate: &Certificate, names: &[String]) -> String {
     let mut lines: Vec<Line> = vec![Line {
         node: 0,
         children: Vec::new(),
@@ -63,22 +82,18 @@ pub fn tree(certificate: &Certificate) -> String {
                 left,
                 right,
             } => {
+                let name = label(names, *variable);
                 say(
                     &mut lines,
                     *parent,
-                    format!("branch on x{variable}: <= {split} | >= {}", plus_one(split)),
+                    format!("branch on {name}: <= {split} | >= {}", plus_one(split)),
                 );
-                add(
-                    &mut lines,
-                    *parent,
-                    *left,
-                    format!("x{variable} <= {split}"),
-                );
+                add(&mut lines, *parent, *left, format!("{name} <= {split}"));
                 add(
                     &mut lines,
                     *parent,
                     *right,
-                    format!("x{variable} >= {}", plus_one(split)),
+                    format!("{name} >= {}", plus_one(split)),
                 );
             }
             Record::LeafBound { node, bound } => {
@@ -335,6 +350,15 @@ pub fn records(certificate: &Certificate) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The renderer with no labels, which falls back to column indices.
+    ///
+    /// Most of these fixtures are hand-built record lists with no model
+    /// behind them, so there are no names to give; the fallback is what they
+    /// are testing anyway.
+    fn tree_named(certificate: &Certificate) -> String {
+        tree(certificate, &[])
+    }
     use hc_exact::BigInt;
 
     fn whole(value: i64) -> Rational {
@@ -353,7 +377,7 @@ mod tests {
 
     #[test]
     fn a_root_only_proof_renders_one_node_and_its_claim() {
-        let rendered = tree(&certificate(vec![
+        let rendered = tree_named(&certificate(vec![
             Record::Root {
                 node: 0,
                 model: [0; 32],
@@ -382,8 +406,45 @@ mod tests {
     }
 
     #[test]
+    fn a_branch_is_named_by_the_reduced_model_and_numbered_without_one() {
+        let records = vec![
+            Record::Root {
+                node: 0,
+                model: [0; 32],
+            },
+            Record::Branch {
+                parent: 0,
+                variable: 1,
+                split: whole(2),
+                left: 1,
+                right: 2,
+            },
+        ];
+        // The label a reader can connect to their own file.
+        let named = tree(
+            &certificate(records.clone()),
+            &["OPEN_A".to_owned(), "OPEN_B".to_owned()],
+        );
+        assert!(named.contains("branch on OPEN_B: <= 2 | >= 3"));
+        assert!(named.contains("OPEN_B <= 2"));
+        assert!(named.contains("OPEN_B >= 3"));
+        assert!(!named.contains("x1"));
+
+        // And with nothing to look the column up in, the index, which is what
+        // the record actually says. Inventing a name would be worse than a
+        // number: presolve removes columns, so the reduced model's coordinates
+        // and the file's are not the same ones.
+        let bare = tree_named(&certificate(records.clone()));
+        assert!(bare.contains("branch on x1: <= 2 | >= 3"));
+
+        // A short or blank list falls back per column rather than in bulk.
+        let partial = tree(&certificate(records), &["OPEN_A".to_owned()]);
+        assert!(partial.contains("branch on x1"));
+    }
+
+    #[test]
     fn a_branched_proof_indents_its_children_and_closes_the_last_branch() {
-        let rendered = tree(&certificate(vec![
+        let rendered = tree_named(&certificate(vec![
             Record::Root {
                 node: 0,
                 model: [0; 32],
@@ -428,7 +489,7 @@ mod tests {
 
     #[test]
     fn a_deeper_tree_draws_bars_only_where_a_sibling_is_still_coming() {
-        let rendered = tree(&certificate(vec![
+        let rendered = tree_named(&certificate(vec![
             Record::Root {
                 node: 0,
                 model: [0; 32],
@@ -469,7 +530,7 @@ mod tests {
 
     #[test]
     fn a_certificate_with_no_claim_says_so_rather_than_inventing_one() {
-        let rendered = tree(&certificate(vec![Record::Root {
+        let rendered = tree_named(&certificate(vec![Record::Root {
             node: 0,
             model: [0; 32],
         }]));

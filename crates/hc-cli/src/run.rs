@@ -391,7 +391,15 @@ pub fn explain(instance_name: &str, raw: &[u8], asked: &Explanation) -> Explaine
 
     let mut report = String::new();
     if asked.tree {
-        report.push_str(&tree(&assembled));
+        // The reduced model's labels, because a branch record cites one of
+        // its columns rather than one of the original file's.
+        let names: Vec<String> = chain
+            .reduced
+            .variables()
+            .iter()
+            .map(|variable| variable.name.clone())
+            .collect();
+        report.push_str(&tree(&assembled, &names));
     }
     if asked.proof {
         report.push_str(&records(&assembled));

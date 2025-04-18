@@ -760,6 +760,7 @@ mod tests {
             digest: [0; 32],
             claim: crate::vhcc::Claim::Optimal,
             bytes: 0,
+            spans: Vec::new(),
             steps,
         }
     }
@@ -808,8 +809,10 @@ mod tests {
         assert_eq!(refusal.code, Code::TREE_UNTERMINATED);
     }
 
+    /// The two children of a split cover their parent only because the column is
+    /// integer. On a continuous one they leave everything between them.
     #[test]
-    fn a_branch_on_a_variable_the_model_does_not_declare_integer_is_refused() {
+    fn trap_branch_noninteger_variable() {
         let mut instance = model();
         instance.columns[0].whole = false;
         let mut axioms = Axioms::of(&instance);
@@ -894,8 +897,10 @@ mod tests {
         assert_eq!(refusal.code, Code::TREE_LEAF_NODE);
     }
 
+    /// A branch assumption belongs to one child. An inference at the other citing
+    /// it is citing a fact about a region it is not in.
     #[test]
-    fn an_inference_citing_a_sibling_assumption_is_not_visible() {
+    fn trap_scope_sibling_reference() {
         // Node 1's assumption takes identifier 3 and node 2's takes 4. An
         // inference at node 1 citing 4 is citing its sibling's region.
         let refusal = run(
@@ -919,8 +924,10 @@ mod tests {
         assert_eq!(refusal.code, Code::SCOPE_NOT_VISIBLE);
     }
 
+    /// A record may cite only records before it. A forward citation is how a proof
+    /// would rest on something derived from it.
     #[test]
-    fn a_leaf_citing_a_record_after_itself_is_refused() {
+    fn trap_inference_future_reference() {
         let refusal = run(
             vec![root(), Step::LeafBound { node: 0, bound: 2 }, bound(0)],
             Some(whole(-4)),
@@ -1032,7 +1039,14 @@ mod tests {
     }
 
     #[test]
-    fn an_integral_leaf_whose_point_misses_its_bound_is_refused() {
+    /// A Leaf.Integral cites a DualBound at its own node, and the point it
+    /// carries must attain exactly that bound.
+    ///
+    /// The point alone proves nothing about the node — a feasible point is an
+    /// upper bound and says nothing about what else the region holds. The
+    /// format cannot express a leaf without the citation, and this is the check
+    /// that the citation is doing work rather than sitting there.
+    fn trap_integral_leaf_without_bound() {
         let refusal = run(
             vec![
                 root(),

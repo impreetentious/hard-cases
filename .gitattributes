@@ -8,9 +8,14 @@
 * text=auto eol=lf
 
 # Instance and certificate fixtures are hashed as-is. Never normalize them.
+# The JSON schema is an instance format here as well as a data format, so a
+# file under it is hashed like any other model; the trace is bound to the
+# certificate of its run by length and checksum, so its bytes are exact too.
 *.mps -text
 *.lp -text
 *.hcc -text
+*.hct -text
+spec/v1/vectors/json/*.json -text
 
 # Binary — never convert
 *.gif binary
