@@ -102,6 +102,25 @@ fn the_rejection_registry_matches_the_asset() {
 
     let document = SpecDocument::parse(include_str!("../../../spec/v1/rejections.toml"))
         .expect("inside the subset");
+    // Retired identifiers are declared and deliberately registered by nobody:
+    // each names a check an earlier identifier answers, or an encoding this
+    // format does not have. They stay in the asset because something published
+    // them once, and a registry that carried one would invite its use.
+    let retired: Vec<&str> = document
+        .tables_under("reject")
+        .filter(|table| {
+            table
+                .get("retired")
+                .and_then(hc_core::SpecValue::as_boolean)
+                == Some(true)
+        })
+        .map(|table| table.name().trim_start_matches("reject."))
+        .collect();
+    assert!(
+        !retired.is_empty(),
+        "no identifier is retired, so the exemption below covers nothing and \
+         should be deleted rather than left to grow quietly"
+    );
     let declared: Vec<&str> = document
         .tables_under("reject")
         .map(|table| table.name().trim_start_matches("reject."))
@@ -114,6 +133,10 @@ fn the_rejection_registry_matches_the_asset() {
             "{entry} is named in the registry and not declared in the asset"
         );
         assert!(
+            !retired.contains(&entry.as_str()),
+            "{entry} is retired and this crate still registers it"
+        );
+        assert!(
             COVERED_GROUPS.contains(&entry.group()),
             "{entry} belongs to a group this crate does not claim to cover"
         );
@@ -122,7 +145,7 @@ fn the_rejection_registry_matches_the_asset() {
     // And nothing in a covered group may be missing from here.
     for id in &declared {
         let group = &id[..id.rfind('-').expect("an identifier has a group")];
-        if !COVERED_GROUPS.contains(&group) {
+        if !COVERED_GROUPS.contains(&group) || retired.contains(id) {
             continue;
         }
         assert!(

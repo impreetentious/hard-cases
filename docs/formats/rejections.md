@@ -10,6 +10,7 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 
 - **earliest** — Each identifier names exactly one check, and that check is the earliest point at which the defect is detectable. A tamper case that could plausibly be caught by two checks must be caught by the earlier one, so the corpus pins the order of the checks as well as their existence.
 - **exit_code** — hc verify exits 0 on acceptance and 1 on rejection, printing the identifier, the offending record, and the deterministic work units consumed.
+- **retired** — An identifier whose check turned out to be answered by an earlier one, or to describe an encoding this format does not have, is marked retired and names the identifier that answers instead. It is never removed and never reused: something published it once. A retired identifier is not registered by either implementation, and a gate refuses the build if one is, or if a live identifier is registered by neither.
 - **grouping** — The HCC groups cover the certificate. The instance group covers the original file, and exists because the two independent parsers must be able to disagree comparably: a differential test that sees one parser accept and the other reject needs to know whether they rejected for the same reason.
 
 ## HC-INSTANCE
@@ -67,7 +68,7 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 | `HCC-PARSE-15` | rational token exceeds the maximum token length | Declared token length, before reading the rational text. |
 | `HCC-PARSE-16` | set-valued array is unsorted or contains a repeat | Element order within an array whose semantics are a set. |
 | `HCC-PARSE-17` | End record counts disagree with the stream | End record counts against the records actually read. |
-| `HCC-PARSE-18` | declared tree depth exceeds the cap | Declared tree depth against the hard depth cap, before replay. |
+| ~~`HCC-PARSE-18`~~ | declared tree depth exceeds the cap | Declared tree depth against the hard depth cap, before replay. |
 | `HCC-PARSE-19` | record count exceeds the cap | Running record count against the cap, during the stream. |
 | `HCC-PARSE-20` | certificate byte length exceeds the cap | Running byte count against the cap, during the stream. |
 
@@ -78,12 +79,12 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 | `HCC-TRANSFORM-01` | unknown transform rule | Transform rule identifier against the closed list. |
 | `HCC-TRANSFORM-02` | transform is not applicable to the recomputed model | Applicability condition, recomputed on the model the verifier holds. |
 | `HCC-TRANSFORM-03` | recomputed model does not match the hash the transform states | Canonical hash of the recomputed result against the record. |
-| `HCC-TRANSFORM-04` | forward map does not preserve feasibility or objective direction | Forward map on the witness points carried by the certificate. |
-| `HCC-TRANSFORM-05` | reverse map does not restore feasibility with equal objective | Reverse map on the witness points carried by the certificate. |
+| ~~`HCC-TRANSFORM-04`~~ | forward map does not preserve feasibility or objective direction | Forward map on the witness points carried by the certificate. |
+| ~~`HCC-TRANSFORM-05`~~ | reverse map does not restore feasibility with equal objective | Reverse map on the witness points carried by the certificate. |
 | `HCC-TRANSFORM-06` | transform contradiction does not follow from the recomputed model | Contradiction derivation, recomputed from the cited row and bounds. |
 | `HCC-TRANSFORM-07` | transform record appears after the root | Record position relative to the Root record. |
-| `HCC-TRANSFORM-08` | integer bound was rounded in the wrong direction | Rounding direction on an integer bound derived by the transform. |
-| `HCC-TRANSFORM-09` | transform chain does not produce the reduced model the root names | Final chain model hash against the Root reduced model hash. |
+| ~~`HCC-TRANSFORM-08`~~ | integer bound was rounded in the wrong direction | Rounding direction on an integer bound derived by the transform. |
+| ~~`HCC-TRANSFORM-09`~~ | transform chain does not produce the reduced model the root names | Final chain model hash against the Root reduced model hash. |
 
 ## HCC-SCOPE
 
@@ -91,7 +92,7 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 |---|---|---|
 | `HCC-SCOPE-01` | cited inequality is not visible at this node | Visibility of each cited inequality at the citing node. |
 | `HCC-SCOPE-02` | record cites an identifier that does not precede it | Cited identifier against the citing identifier. |
-| `HCC-SCOPE-03` | cut is cited outside the subtree it was derived in | Ancestry of the citing node against the cut scope node. |
+| ~~`HCC-SCOPE-03`~~ | cut is cited outside the subtree it was derived in | Ancestry of the citing node against the cut scope node. |
 | `HCC-SCOPE-04` | cut scope node is neither the derivation node nor an ancestor of it | Cut scope node against the derivation node. |
 | `HCC-SCOPE-05` | tableau combination uses a row not visible at the derivation node | Visibility of each row entering the tableau combination. |
 
@@ -123,7 +124,7 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 | `HCC-CUT-10` | lifting coefficient is negative or not an integer | Sign and integrality of each recomputed lifting coefficient. |
 | `HCC-CUT-11` | recomputed lifting coefficient differs from the coefficient stated | Recomputed lifting coefficients against the serialized ones. |
 | `HCC-CUT-12` | lifting exceeds the dynamic-program caps, so only an unlifted cover is admissible | Dynamic-program size against the caps, before running it. |
-| `HCC-CUT-13` | unknown cut family | Cut family identifier against the closed list. |
+| ~~`HCC-CUT-13`~~ | unknown cut family | Cut family identifier against the closed list. |
 
 ## HCC-TREE
 
@@ -139,7 +140,7 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 | `HCC-TREE-08` | leaf cites an inference made at a different node | Node of the cited inference against the node of the leaf. |
 | `HCC-TREE-09` | integral leaf point is not feasible or not integral | Reduced point of an integral leaf against the node model. |
 | `HCC-TREE-10` | integral leaf objective does not equal its cited bound | Objective of the integral leaf point against its cited bound. |
-| `HCC-TREE-11` | frontier leaf has no finite bound | Finiteness of the frontier bound. |
+| ~~`HCC-TREE-11`~~ | frontier leaf has no finite bound | Finiteness of the frontier bound. |
 | `HCC-TREE-12` | frontier bound is at least the incumbent objective and must be a closed leaf | Frontier bound against the incumbent objective. |
 | `HCC-TREE-13` | tree depth exceeds the cap | Replay stack depth against the cap. |
 | `HCC-TREE-14` | root names a reduced model the transform chain does not produce | Root reduced model hash against the replayed chain. |
@@ -183,3 +184,21 @@ Every rejection identifier, the group it belongs to, and the earliest check that
 | `HCC-CLAIM-08` | recomputed gap differs from the gap stated | Recomputed gap against the stated gap. |
 | `HCC-CLAIM-09` | infeasible claim has a leaf that is not a contradiction | Leaf kinds present, for an infeasible claim. |
 | `HCC-CLAIM-10` | claim kind is not permitted with the records present | Claim kind against the record kinds present. |
+
+## Retired
+
+These identifiers were published and are never reused. Each names a check
+that turned out to be answered by an earlier identifier, or to describe an
+encoding this format does not have. Neither implementation registers one,
+and a gate refuses the build if that changes.
+
+| Identifier | Answered by | Why |
+|---|---|---|
+| `HCC-PARSE-18` | `HCC-TREE-13` | The header declares no tree depth. Depth is bounded during the replay itself, which is iterative and holds its own stack, so the cap is enforced where the depth becomes known rather than where a declaration would have been. |
+| `HCC-TRANSFORM-04` | `HCC-POINT-05` | The forward map is checked, and the failure it produces is a disagreement between the two witnesses a certificate carries rather than a fact about one transform. The original point is pushed through the chain and compared against the reduced one; the useful thing to say when they differ is that they no longer describe the same solution. |
+| `HCC-TRANSFORM-05` | `HCC-POINT-05` | The certificate carries both witnesses, so binding them in one direction binds them. A reverse map is what the solver does to lift a point; the verifier checks the correspondence rather than reproducing the lift, which is the same statement with one fewer implementation in it. |
+| `HCC-TRANSFORM-08` | `HCC-TRANSFORM-03` | The result of a transform is recomputed and hashed, never read. A bound rounded the wrong way produces a different model and therefore a different hash, and it is refused there, before anything asks which field was wrong. |
+| `HCC-TRANSFORM-09` | `HCC-TREE-14` | The same check under two identifiers. The comparison happens when the root record is read against the replayed chain, which is a fact about the trees starting point rather than about the last transform, and the corpus pins it there. |
+| `HCC-SCOPE-03` | `HCC-SCOPE-01` | Visibility at a node is one predicate: the inequalities of the model itself, the assumptions on the path to the root, and the cuts whose scope is on that path. A cut cited outside the subtree it was derived in is a cut that is not visible, and it is refused there, which is earlier. |
+| `HCC-CUT-13` | `HCC-PARSE-10` | The family of a cut is its record type code, so a family outside the closed list is an unknown record type and is refused before any cut rule runs. There is no separate family field to check. |
+| `HCC-TREE-11` | — | A bound is a rational, and this format has no spelling for an infinite one. A frontier bound that could not be established is an absent record rather than an infinite value, which the recursive cover refuses as an unterminated node. |

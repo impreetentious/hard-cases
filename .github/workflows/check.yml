@@ -18,6 +18,9 @@ jobs:
           toolchain: 1.85.0
           components: rustfmt, clippy
       - run: node scripts/check-version-coherence.mjs
+      # The contracts the assets name are real: every rejection identifier is
+      # one some implementation can produce, and every trap names a test.
+      - run: node scripts/ci/contracts.mjs
       # The normative assets are checked before anything is compiled: a broken
       # rule invalidates the code that satisfies it, not the other way round.
       - run: node scripts/gen-docs.mjs --check

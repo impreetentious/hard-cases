@@ -175,6 +175,23 @@ for (const [name, entry] of Object.entries(rejections)) {
   const id = name.slice("reject.".length);
   declared.add(id);
   if (!id.startsWith(`${entry.group}-`)) problems.push(`rejections.toml: ${id} does not belong to group ${entry.group}`);
+  if (entry.answered_by !== undefined && entry.answered_by !== "none") {
+    // An identifier that answers instead has to be one somebody can look up,
+    // and it has to still be live: a chain of retirements would send a reader
+    // from one dead rule to another.
+    const target = rejections[`reject.${entry.answered_by}`];
+    if (target === undefined) {
+      problems.push(`rejections.toml: ${id} points at ${entry.answered_by}, which is not declared`);
+    } else if (target.retired) {
+      problems.push(`rejections.toml: ${id} points at ${entry.answered_by}, which is retired too`);
+    }
+  }
+  if (entry.retired !== undefined) {
+    if (entry.retired !== true) problems.push(`rejections.toml: ${id} states retired as something other than true`);
+    for (const key of ["answered_by", "retired_note"]) {
+      if (typeof entry[key] !== "string") problems.push(`rejections.toml: retired ${id} is missing ${key}`);
+    }
+  }
   for (const key of ["check", "message"]) {
     if (typeof entry[key] !== "string") problems.push(`rejections.toml: ${id} is missing ${key}`);
   }
@@ -189,6 +206,12 @@ for (const [file, asset] of assets) {
         if (typeof text !== "string") continue;
         for (const id of text.match(ID_PATTERN) ?? []) {
           if (!declared.has(id)) problems.push(`${file}: [${name}] names undeclared rejection identifier ${id}`);
+          else if (rejections[`reject.${id}`]?.retired) {
+            // A vector or a rule naming a retired identifier is a vector
+            // waiting for a rejection nothing can produce. It would pass, on
+            // the wrong rule, for as long as anybody left it alone.
+            problems.push(`${file}: [${name}] names retired rejection identifier ${id}`);
+          }
         }
       }
     }
@@ -294,7 +317,35 @@ function renderRejections(asset) {
   for (const [group, entries] of groups) {
     out.push(`## ${group}`, "", "| Identifier | Message | Earliest check |", "|---|---|---|");
     for (const entry of entries) {
-      out.push(`| \`${entry.id}\` | ${escapeCell(entry.message)} | ${escapeCell(entry.check)} |`);
+      const id = entry.retired ? `~~\`${entry.id}\`~~` : `\`${entry.id}\``;
+      out.push(`| ${id} | ${escapeCell(entry.message)} | ${escapeCell(entry.check)} |`);
+    }
+    out.push("");
+  }
+
+  // Retirement is the one thing about an identifier a reader has to be told
+  // rather than shown, because what they need is the identifier that answers
+  // instead — a struck-through row on its own would leave them looking for a
+  // rule nobody can produce.
+  const retired = Object.entries(asset)
+    .filter(([name, entry]) => name.startsWith("reject.") && entry.retired)
+    .map(([name, entry]) => ({ id: name.slice("reject.".length), ...entry }));
+  if (retired.length > 0) {
+    out.push(
+      "## Retired",
+      "",
+      "These identifiers were published and are never reused. Each names a check",
+      "that turned out to be answered by an earlier identifier, or to describe an",
+      "encoding this format does not have. Neither implementation registers one,",
+      "and a gate refuses the build if that changes.",
+      "",
+      "| Identifier | Answered by | Why |",
+      "|---|---|---|",
+    );
+    for (const entry of retired) {
+      out.push(
+        `| \`${entry.id}\` | ${entry.answered_by === "none" ? "—" : `\`${entry.answered_by}\``} | ${escapeCell(entry.retired_note)} |`,
+      );
     }
     out.push("");
   }

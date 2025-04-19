@@ -170,8 +170,6 @@ codes! {
     CUT_LIFT_COEFFICIENT = "HCC-CUT-11",
     /// The lifting program exceeds the caps that make it admissible.
     CUT_LIFT_CAPS = "HCC-CUT-12",
-    /// A cut names a family outside the closed list.
-    CUT_UNKNOWN_FAMILY = "HCC-CUT-13",
 
     /// An inference uses a negative multiplier.
     DUAL_NEGATIVE = "HCC-DUAL-01",
@@ -222,8 +220,6 @@ codes! {
     PARSE_SET_ORDER = "HCC-PARSE-16",
     /// The terminator's counts disagree with the stream.
     PARSE_END_COUNTS = "HCC-PARSE-17",
-    /// The declared tree depth exceeds the cap.
-    PARSE_DEPTH = "HCC-PARSE-18",
     /// The record count exceeds the cap.
     PARSE_RECORD_COUNT = "HCC-PARSE-19",
     /// The byte length exceeds the cap.
@@ -265,8 +261,6 @@ codes! {
     SCOPE_NOT_VISIBLE = "HCC-SCOPE-01",
     /// A record cites an identifier that does not precede it.
     SCOPE_FORWARD = "HCC-SCOPE-02",
-    /// A cut is cited outside the subtree it was derived in.
-    SCOPE_OUTSIDE_SUBTREE = "HCC-SCOPE-03",
     /// A cut's scope node is not the derivation node or an ancestor.
     SCOPE_BAD_SCOPE_NODE = "HCC-SCOPE-04",
     /// A tableau combination uses a row not visible at its node.
@@ -278,18 +272,10 @@ codes! {
     TRANSFORM_NOT_APPLICABLE = "HCC-TRANSFORM-02",
     /// The recomputed model does not match the hash the record states.
     TRANSFORM_HASH = "HCC-TRANSFORM-03",
-    /// The forward map does not preserve feasibility or objective direction.
-    TRANSFORM_FORWARD = "HCC-TRANSFORM-04",
-    /// The reverse map does not restore feasibility with equal objective.
-    TRANSFORM_REVERSE = "HCC-TRANSFORM-05",
     /// A transform contradiction does not follow from the recomputed model.
     TRANSFORM_CONTRADICTION = "HCC-TRANSFORM-06",
     /// A transform record appears after the root.
     TRANSFORM_AFTER_ROOT = "HCC-TRANSFORM-07",
-    /// An integer bound was rounded in the wrong direction.
-    TRANSFORM_ROUNDING = "HCC-TRANSFORM-08",
-    /// The transform chain does not produce the model the root names.
-    TRANSFORM_CHAIN_END = "HCC-TRANSFORM-09",
 
     /// A branch variable is not declared integer.
     TREE_BRANCH_NOT_INTEGER = "HCC-TREE-01",
@@ -311,8 +297,6 @@ codes! {
     TREE_INTEGRAL_POINT = "HCC-TREE-09",
     /// An integral leaf's objective does not equal its cited bound.
     TREE_INTEGRAL_OBJECTIVE = "HCC-TREE-10",
-    /// A frontier leaf has no finite bound.
-    TREE_FRONTIER_INFINITE = "HCC-TREE-11",
     /// A frontier bound is at least the incumbent and must close its node.
     TREE_FRONTIER_CLOSED = "HCC-TREE-12",
     /// The replay stack exceeds the depth cap.

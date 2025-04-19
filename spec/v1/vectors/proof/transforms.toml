@@ -314,8 +314,8 @@ trap = 'trap_transform_after_data_not_trusted'
 
 [chain.root_hash_mismatch]
 verdict = 'reject'
-id = 'HCC-TRANSFORM-09'
-working = 'A chain that replays cleanly but does not end at the reduced model the root names is rejected. Otherwise a proof about one reduced model could be attached to a chain producing another.'
+id = 'HCC-TREE-14'
+working = 'A chain that replays cleanly but does not end at the reduced model the root names is rejected. Otherwise a proof about one reduced model could be attached to a chain producing another. The comparison is a fact about the point the tree starts from rather than about the last transform, which is why it is answered by a tree identifier and not a transform one.'
 
 [chain.transform_after_root]
 verdict = 'reject'

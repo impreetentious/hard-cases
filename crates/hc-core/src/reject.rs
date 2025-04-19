@@ -166,8 +166,6 @@ rejections! {
     HCC_SET_ORDER => "HCC-PARSE-16",
     /// The terminating record's counts disagree with the stream.
     HCC_END_COUNTS => "HCC-PARSE-17",
-    /// The declared tree depth exceeds the cap.
-    HCC_DEPTH => "HCC-PARSE-18",
     /// The running record count exceeds the cap.
     HCC_RECORD_COUNT => "HCC-PARSE-19",
     /// The running byte count exceeds the cap.
