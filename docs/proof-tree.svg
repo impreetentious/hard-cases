@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1016 358" width="1016" height="358" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" role="img" aria-label="the proof tree of fixcharge6.mps">
+  <title>The certified proof tree of fixcharge6.mps</title>
+  <path d="M 366.5 49.0 C 366.5 88.0, 224.0 88.0, 224.0 127.0" fill="none" stroke="#8a8f98" stroke-width="1.2"/>
+  <text x="263.9" y="109.6" text-anchor="middle" font-size="11" fill="#8a8f98">x4 ≤ 0</text>
+  <path d="M 366.5 49.0 C 366.5 88.0, 509.0 88.0, 509.0 127.0" fill="none" stroke="#8a8f98" stroke-width="1.2"/>
+  <text x="469.1" y="109.6" text-anchor="middle" font-size="11" fill="#8a8f98">x4 ≥ 1</text>
+  <path d="M 224.0 157.0 C 224.0 196.0, 129.0 196.0, 129.0 235.0" fill="none" stroke="#8a8f98" stroke-width="1.2"/>
+  <text x="155.6" y="217.6" text-anchor="middle" font-size="11" fill="#8a8f98">x5 ≤ 0</text>
+  <path d="M 224.0 157.0 C 224.0 196.0, 319.0 196.0, 319.0 235.0" fill="none" stroke="#8a8f98" stroke-width="1.2"/>
+  <text x="292.4" y="217.6" text-anchor="middle" font-size="11" fill="#8a8f98">x5 ≥ 1</text>
+  <circle cx="366.5" cy="34.0" r="15" fill="none" stroke="#b07d2b" stroke-width="2"/>
+  <text x="366.5" y="38.0" text-anchor="middle" font-size="12" fill="#6e7781">0</text>
+  <text x="366.5" y="65.0" text-anchor="middle" font-size="11" fill="#6e7781">split</text>
+  <circle cx="224.0" cy="142.0" r="15" fill="none" stroke="#b07d2b" stroke-width="2"/>
+  <text x="224.0" y="146.0" text-anchor="middle" font-size="12" fill="#6e7781">1</text>
+  <text x="224.0" y="173.0" text-anchor="middle" font-size="11" fill="#6e7781">split</text>
+  <circle cx="509.0" cy="142.0" r="15" fill="#1f9c9255" stroke="#1f9c92" stroke-width="2"/>
+  <text x="509.0" y="146.0" text-anchor="middle" font-size="12" fill="#6e7781">2</text>
+  <text x="509.0" y="173.0" text-anchor="middle" font-size="11" fill="#6e7781">integral, attains its bound</text>
+  <text x="509.0" y="187.0" text-anchor="middle" font-size="11" fill="#1f9c92">68</text>
+  <circle cx="129.0" cy="250.0" r="15" fill="none" stroke="#8a8f98" stroke-width="2"/>
+  <text x="129.0" y="254.0" text-anchor="middle" font-size="12" fill="#6e7781">3</text>
+  <text x="129.0" y="281.0" text-anchor="middle" font-size="11" fill="#6e7781">no feasible point</text>
+  <circle cx="319.0" cy="250.0" r="15" fill="#b07d2b33" stroke="#b07d2b" stroke-width="2"/>
+  <text x="319.0" y="254.0" text-anchor="middle" font-size="12" fill="#6e7781">4</text>
+  <text x="319.0" y="281.0" text-anchor="middle" font-size="11" fill="#6e7781">closed by a bound</text>
+  <text x="319.0" y="295.0" text-anchor="middle" font-size="11" fill="#b07d2b">70</text>
+  <text x="34" y="342.0" font-size="12" fill="#6e7781">fixcharge6.mps · claim optimal · objective 68 · 409 bytes rechecked in 3442 work units by hc-verify, which links none of the solver</text>
+</svg>

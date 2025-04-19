@@ -21,22 +21,55 @@ at all, and its trust boundary is published rather than described as magic. What
 that boundary does and does not include is spelled out in
 [limitations](docs/LIMITATIONS.md).
 
-The situation room mid-solve: the tree growing, bound and incumbent strips converging, then a tampered certificate field rejected with the exact failing inequality highlighted.
+![The certified proof tree of a small fixed-charge model: five nodes, one split
+into two, and each leaf closed by a contradiction, by a bound, or by an
+integral point attaining its own bound — with the certificate's size and the
+verifier's work underneath.](docs/proof-tree.svg)
+
+That picture is generated, not drawn: `cargo run -p hc-bench --bin scoreboard`
+solves the instance, assembles the certificate, has the standalone verifier
+recheck it, and renders what happened. A test regenerates it and diffs, so a
+change to the search that changes the tree redraws the figure in the same
+commit.
 
 **[Open the situation room →](https://itsmonarch04.github.io/hard-cases/)** The
-same engine runs in your browser: watch a real solve build its tree, click any
-node to see why it was pruned, pause the search and certify the current
-frontier, then open the tamper lab, edit a proof, and watch the verifier name
-the rule that lies. No toolchain required.
+same engine runs in your browser, compiled to WebAssembly with no server behind
+it: watch a real solve build its tree, click any node to see why it was closed,
+pause the search after one node and certify the gap that is left, then open the
+tamper lab, edit a byte of the proof, repair its checksum, and watch the
+verifier name the rule that refuses it.
+
+Everything the page draws comes from a solve it just performed or from a run
+recorded by the command line and replayed, and it says which at all times.
+Nothing on it is a mock.
+
+<!-- counters:begin -->
+| measured | |
+|---|---:|
+| verifier source, excluding its own tests | 8426 lines in 23 files |
+| dependencies the verifier declares | 0 |
+| uses of unsafe inside the verifier | 0 |
+| committed instances a gate consumes | 12 |
+| linear ones answered identically by two unrelated solvers | 8 of 8 |
+| mixed-integer ones whose certificate the standalone verifier accepted | 4 of 4 |
+| named mutations in the tamper corpus | 31 |
+| rejection identifiers an implementation can answer with | 114 |
+| of those, retired and answered by an earlier rule | 8 |
+| separation rounds every surface runs | 4 |
+<!-- counters:end -->
+
+The table above is written by `cargo run -p hc-bench --bin scoreboard`, which a
+test then regenerates and diffs. A number on a front page is a claim like any
+other, and these are the ones most likely to quietly stop being true.
 
 ## Try the current workspace
 
 ```sh
-cargo run -p hc-cli -- solve instances/demo/sudoku16.mps --cert out.hcc
-cargo run -p hc-verify --bin hc-verify -- out.hcc --instance instances/demo/sudoku16.mps
-cargo run -p hc-cli -- explain instances/demo/knapsack.lp --tree --proof
+cargo run -p hc-cli -- solve instances/integer/knap9.mps --format mps-free --cert out.hcc
+cargo run -p hc-verify --bin hc-verify -- out.hcc --instance instances/integer/knap9.mps
+cargo run -p hc-cli -- explain instances/integer/parity5.mps --format mps-free --tree --proof
+cargo run -p hc-cli -- receipt
 ./scripts/preflight.sh
-./scripts/demo.sh
 ```
 
 The second command is the point of the project. It links none of the solver,
@@ -71,10 +104,16 @@ The repository contains:
   integer-compatible unboundedness, certified gaps, and — when no bound can be
   certified — a plain feasible point the verifier checks against the original
   model;
-- the tamper corpus: deliberately corrupted certificates with expected rejection
-  identifiers, shipped as a product surface rather than a test fixture;
-- the situation room, the case files of real bugs found by differential and
-  fuzz campaigns, and permanent scoreboards on netlib and a fixed MIPLIB subset.
+- the tamper corpus: thirty-one named mutations of genuine certificates, each
+  paired with the rule that must catch it, shipped as a product surface rather
+  than a test fixture — the situation room offers every one of them to a
+  visitor;
+- committed instance corpora that gates actually consume: eight linear models
+  run by two independently written solvers, and four mixed-integer ones whose
+  optima are also found by enumerating every point in their integer boxes;
+- the situation room, and the case files of real defects found by the
+  differential, fuzz and certification campaigns, each with the seed or the
+  command that reproduces it.
 
 **No speed races, ever.** This project publishes no wall-clock comparison
 against another solver. Correctness cross-checks against published optimal
@@ -88,7 +127,13 @@ false terminal claim is a severity-zero defect. See
 ## Going deeper
 
 The write-ups are the point of the project — each one names a failure mode and
-shows the machinery that catches it.
+shows the machinery that catches it, out of the code and the incidents in this
+repository rather than out of a general argument.
+
+The verifier's own trust boundary is not described in a document that could go
+stale: `hc receipt` measures it — how much code did the checking, what it
+depends on, the hash of that source, and what one real verification cost in
+units that are not seconds.
 
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this does and does not
   prove; read it before interpreting any result
@@ -99,8 +144,9 @@ shows the machinery that catches it.
   [a proof you can tamper with](docs/writeups/04-tamper.md),
   [the cut that lies](docs/writeups/05-cut-validity.md), and
   [honest scoreboards](docs/writeups/06-honest-scoreboards.md)
-- [`docs/adr/0010-a-verifier-refuses-what-it-cannot-check.md`](docs/adr/0010-a-verifier-refuses-what-it-cannot-check.md) — the verifier's trust boundary
-  source hash, and the words "independent" is and is not doing here
+- [`docs/scoreboard.md`](docs/scoreboard.md) — what this solver does on the
+  committed corpora, generated and diffed on every run of the suite, with the
+  fetched collections named rather than covered up
 - [`docs/formats/`](docs/formats/) — the certificate grammar, the accepted
   MPS and LP subsets, and the JSON schema, generated from the inert assets
 - [`docs/case-files/`](docs/case-files/) — real bugs, minimized, with the
@@ -130,4 +176,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.12.8
+**Version:** v0.12.9
