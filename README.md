@@ -92,7 +92,13 @@ shows the machinery that catches it.
 
 - [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this does and does not
   prove; read it before interpreting any result
-- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this kernel will not claim
+- [`docs/writeups/`](docs/writeups/) — the six essays:
+  [the solver that shows its work](docs/writeups/01-shows-its-work.md),
+  [big rationals from nothing](docs/writeups/02-big-rationals.md),
+  [degeneracy, the simplex's haunted house](docs/writeups/03-degeneracy.md),
+  [a proof you can tamper with](docs/writeups/04-tamper.md),
+  [the cut that lies](docs/writeups/05-cut-validity.md), and
+  [honest scoreboards](docs/writeups/06-honest-scoreboards.md)
 - [`docs/adr/0010-a-verifier-refuses-what-it-cannot-check.md`](docs/adr/0010-a-verifier-refuses-what-it-cannot-check.md) — the verifier's trust boundary
   source hash, and the words "independent" is and is not doing here
 - [`docs/formats/`](docs/formats/) — the certificate grammar, the accepted
@@ -124,4 +130,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.12.7
+**Version:** v0.12.8

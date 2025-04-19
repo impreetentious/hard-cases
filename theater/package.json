@@ -1,6 +1,6 @@
 {
   "name": "hard-cases-theater",
-  "version": "0.12.7",
+  "version": "0.12.8",
   "private": true,
   "type": "module",
   "description": "The situation room: a static page that solves, certifies, and rechecks in the browser.",
