@@ -1170,7 +1170,10 @@ mod tests {
     }
 
     #[test]
-    fn a_maximizing_objective_is_negated_where_it_is_read() {
+    /// The other half of the same rule, in the reader with four spellings of
+    /// the word. The canonical model minimizes and nothing downstream of a
+    /// reader carries a direction.
+    fn trap_maximize_sign() {
         let built = model("Maximize\n p: 2 x - 3 y + 7\nSubject To\n c: x + y <= 4\nEnd\n");
         assert_eq!(built.variables()[0].objective.to_canonical_string(), "-2");
         assert_eq!(built.variables()[1].objective.to_canonical_string(), "3");

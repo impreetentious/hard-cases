@@ -173,8 +173,11 @@ fn t2_rests_a_costed_empty_column_at_its_improving_endpoint() {
     assert_eq!(after.objective_constant().to_canonical_string(), "-21");
 }
 
+/// An empty column whose improving direction runs to infinity is unbounded, not
+/// restable. The transform declines rather than inventing an endpoint, because
+/// an unboundedness claim is a different statement with its own witness.
 #[test]
-fn t2_declines_when_the_improving_endpoint_is_infinite() {
+fn trap_empty_column_mip_ray() {
     // The improving direction is downward and there is no lower bound, so
     // presolve does not get to decide the model is unbounded.
     let before = build(
@@ -232,8 +235,11 @@ fn t3_swaps_the_sides_when_the_coefficient_is_negative() {
     assert_eq!(after.variables()[0].lower, None);
 }
 
+/// T3 and T7 both derive a bound. On an integer column a derived lower bound
+/// rounds up and a derived upper bound rounds down; rounding either the other
+/// way admits points the row excludes.
 #[test]
-fn t3_rounds_an_integer_bound_inward_on_both_sides() {
+fn trap_integer_round_direction() {
     // 2x <= 7 gives x <= 3.5, which rounds down to 3 for an integer column.
     let before = build(
         " L r0\n",
@@ -269,8 +275,10 @@ fn t3_rounds_an_integer_bound_inward_on_both_sides() {
     );
 }
 
+/// A derived bound that closes a column to nothing is an infeasibility, and it
+/// is reported as a derivation the verifier can replay rather than as a status.
 #[test]
-fn t3_reports_an_empty_intersection_as_a_contradiction() {
+fn trap_presolve_contradiction_replayed() {
     // x >= 5 against an upper bound of 2.
     let before = build(" G r0\n", " x obj 1 r0 1\n", " rhs r0 5\n", " UP b x 2\n");
     assert_eq!(
@@ -481,8 +489,11 @@ fn t6_declines_with_slack_and_with_an_infinite_endpoint() {
 // T7 TightenBound
 // ---------------------------------------------------------------------------
 
+/// A bound derived from a row and the residual activity of its other terms is
+/// sound: no feasible point of the model violates it, which is why the forward
+/// map for this transform is the identity.
 #[test]
-fn t7_derives_a_tighter_bound_from_a_row_and_the_other_terms() {
+fn trap_bound_tighten_sound() {
     // 2x + y <= 7 with y at least 1 gives 2x <= 6, so x <= 3, tighter than 9.
     let before = build(
         " L r0\n",
@@ -593,8 +604,11 @@ fn t7_rounds_a_derived_integer_bound_inward() {
 // T8 DuplicateColumnAggregate
 // ---------------------------------------------------------------------------
 
+/// Two columns that agree in every row and in the objective aggregate into one,
+/// and the reverse map splits the sum back. It applies to continuous columns:
+/// splitting a sum across integer columns is a different problem.
 #[test]
-fn t8_aggregates_two_identical_continuous_columns() {
+fn trap_duplicate_column_split_integral() {
     let before = build(
         " L r0\n",
         " a obj 2 r0 3\n b obj 2 r0 3\n",

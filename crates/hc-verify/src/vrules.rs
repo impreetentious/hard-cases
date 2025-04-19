@@ -417,8 +417,11 @@ mod tests {
         assert_eq!(bound.value.to_canonical(), "-7");
     }
 
+    /// A negative multiplier reverses the inequality it is applied to, and it is
+    /// checked before the sum is formed: afterwards it is indistinguishable from
+    /// arithmetic that came out wrong.
     #[test]
-    fn a_negative_multiplier_is_caught_before_the_sum_is_formed() {
+    fn trap_negative_dual_multiplier() {
         let instance = model_a();
         let axioms = Axioms::of(&instance);
         let refusal = dual_bound(&mut Work::new(), &axioms, &[(0, whole(-1))], &everything)
@@ -482,8 +485,11 @@ mod tests {
         .expect("accepted");
     }
 
+    /// A Farkas witness over rows only, with the variable bounds assumed available
+    /// by convention. Here a bound is a canonical inequality with an identifier
+    /// exactly as a row side is, and the coefficients fail to cancel.
     #[test]
-    fn the_classic_omission_of_the_bound_multiplier_fails_to_sum() {
+    fn trap_infeasible_farkas_bounds() {
         let instance = model_b();
         let axioms = Axioms::of(&instance);
         let refusal = contradiction(&mut Work::new(), &axioms, &[(0, Frac::one())], &everything)

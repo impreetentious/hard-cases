@@ -165,6 +165,61 @@ mod tests {
         assert_eq!(pool.visible(&[9]).len(), 0);
     }
 
+    /// A cut is known by its position in the pool, and that position is the
+    /// order it was derived in.
+    ///
+    /// The pool is a ledger: nothing is inserted, reordered, or renumbered, so
+    /// a certificate can cite a cut by an identifier that means the same thing
+    /// for the rest of the run. A dropped duplicate must not shift what is
+    /// already there either — a renumbering after the fact would silently
+    /// repoint every citation made before it.
+    #[test]
+    fn trap_cut_ledger_order() {
+        let mut pool = Pool::new();
+        assert!(pool.add(entry(0, 1), &[0]));
+        assert!(pool.add(entry(1, 2), &[1, 0]));
+        assert!(pool.add(entry(2, 3), &[2, 0]));
+        // The coefficient is what distinguishes these entries; the helper puts
+        // it on column zero and leaves the right-hand side at nothing.
+        let shape = |pool: &Pool| -> Vec<(u64, Rational)> {
+            pool.entries()
+                .iter()
+                .map(|held| (held.scope, held.coefficients[0].1.clone()))
+                .collect()
+        };
+        let before = shape(&pool);
+        assert_eq!(
+            before,
+            vec![
+                (0, Rational::from_i64(1)),
+                (1, Rational::from_i64(2)),
+                (2, Rational::from_i64(3))
+            ],
+            "the pool is not in the order the cuts were derived"
+        );
+
+        // A duplicate visible in the same ancestry is dropped, and dropping it
+        // moves nothing: every identifier already handed out still names the
+        // cut it named.
+        assert!(!pool.add(entry(0, 1), &[1, 0]));
+        assert_eq!(
+            shape(&pool),
+            before,
+            "a dropped duplicate renumbered the ledger"
+        );
+
+        // And a cut that is genuinely new goes on the end rather than anywhere
+        // that would displace an identifier.
+        assert!(pool.add(entry(3, 4), &[3, 0]));
+        assert_eq!(pool.len(), 4);
+        assert_eq!(
+            shape(&pool)[..3],
+            before[..],
+            "an added cut displaced an identifier"
+        );
+        assert_eq!(pool.entries()[3].scope, 3);
+    }
+
     #[test]
     fn a_duplicate_inside_one_ancestry_is_dropped_and_across_two_is_not() {
         let mut pool = Pool::new();

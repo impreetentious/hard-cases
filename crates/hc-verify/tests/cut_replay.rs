@@ -161,8 +161,9 @@ fn a_combination_that_isolates_nothing_is_refused() {
     assert_eq!(refusal.code.text(), "HCC-CUT-01");
 }
 
+/// A combination may only name rows visible at the node the cut is derived at.
 #[test]
-fn a_combination_naming_a_row_that_does_not_exist_is_refused() {
+fn trap_tableau_row_scope() {
     let model = fractional();
     let view = View::of(&model);
     let refusal = gomory(&view, &[(9, Frac::one())], 0).expect_err("no such row");

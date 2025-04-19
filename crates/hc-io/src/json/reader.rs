@@ -475,8 +475,17 @@ mod tests {
         assert_eq!(refusal(&gone).id, Rejection::INSTANCE_JSON_SCHEMA);
     }
 
+    /// A maximizing instance is negated at the parse boundary, and the sense
+    /// the author wrote is kept only so that reports and the postsolved witness
+    /// can be printed in it.
+    ///
+    /// The canonical model minimizes, and it minimizes everywhere: nothing
+    /// downstream of a reader carries a direction, so a reader that left one
+    /// for the search to interpret would put a sign in every proof rule. The
+    /// LP reader has its own version of this beside its own spellings of the
+    /// word.
     #[test]
-    fn a_maximizing_document_is_negated_where_it_is_read() {
+    fn trap_maximize_sign() {
         let text = TINY
             .replace("\"sense\": \"min\"", "\"sense\": \"max\"")
             .replace(
