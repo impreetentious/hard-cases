@@ -1,6 +1,6 @@
 //! The C interface, and the only unsafe code in the project.
 //!
-//! Four exports and three allocators. Every call takes a pointer and a length
+//! Eight exports and three allocators. Every call takes a pointer and a length
 //! the caller received from `hc_reserve` and filled in, and returns a pointer
 //! to an *answer*: four bytes of little-endian length followed by that many
 //! bytes of UTF-8. The caller reads them out and hands the pointer back to
@@ -26,7 +26,7 @@
 //! that has to catch a trap to find out its file was malformed cannot say what
 //! was wrong with it.
 
-use crate::{recheck, replay, solve_live};
+use crate::{outline, pivots, recheck, replay, solve_live, tamper_cases, tampered};
 
 /// Reserves a buffer the caller fills and then hands back to a call.
 ///
@@ -164,6 +164,75 @@ pub unsafe extern "C" fn hc_recheck(
     answer(recheck(proof, raw))
 }
 
+/// Runs the root relaxation under the textbook rule and reports every pivot.
+///
+/// # Safety
+///
+/// The pointer and the length must describe a buffer the caller reserved.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn hc_pivots(
+    instance: *const u8,
+    length: usize,
+    format: u8,
+    limit: u32,
+) -> *mut u8 {
+    let raw = unsafe { borrow(instance, length) };
+    answer(match pivots(raw, format, limit as usize) {
+        Ok(glass) => glass,
+        Err(message) => refusal(&message),
+    })
+}
+
+/// Reads a certificate the way the verifier reads it and reports the
+/// structure alongside the verdict.
+///
+/// # Safety
+///
+/// Every pointer and length must describe a buffer the caller reserved.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn hc_outline(
+    proof: *const u8,
+    proof_length: usize,
+    instance: *const u8,
+    instance_length: usize,
+) -> *mut u8 {
+    let proof = unsafe { borrow(proof, proof_length) };
+    let raw = unsafe { borrow(instance, instance_length) };
+    answer(outline(proof, raw))
+}
+
+/// The tamper corpus, as names and expected rejections.
+#[unsafe(no_mangle)]
+pub extern "C" fn hc_tamper_cases() -> *mut u8 {
+    answer(tamper_cases())
+}
+
+/// Applies a named mutation and reports what the verifier says about it.
+///
+/// # Safety
+///
+/// Every pointer and length must describe a buffer the caller reserved.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn hc_tamper(
+    name: *const u8,
+    name_length: usize,
+    proof: *const u8,
+    proof_length: usize,
+    instance: *const u8,
+    instance_length: usize,
+    other: *const u8,
+    other_length: usize,
+) -> *mut u8 {
+    let name = unsafe { borrow(name, name_length) };
+    let proof = unsafe { borrow(proof, proof_length) };
+    let raw = unsafe { borrow(instance, instance_length) };
+    let other = unsafe { borrow(other, other_length) };
+    match core::str::from_utf8(name) {
+        Ok(name) => answer(tampered(name, proof, raw, other)),
+        Err(_) => answer(refusal("the mutation name is not text")),
+    }
+}
+
 /// The version this module was built from, so a page can say what it is running.
 #[unsafe(no_mangle)]
 pub extern "C" fn hc_version() -> *mut u8 {
@@ -229,6 +298,103 @@ mod tests {
     fn an_empty_buffer_is_an_empty_slice_and_not_a_fault() {
         let report = taken(unsafe { hc_solve_live(core::ptr::null(), 0, 1, 10) });
         assert!(report.contains("\"refused\""));
+    }
+
+    #[test]
+    fn the_glass_carries_a_run_of_pivots_out() {
+        let (instance, length) = handed(TINY);
+        let glass = taken(unsafe { hc_pivots(instance, length, 1, 64) });
+        unsafe { hc_release(instance, length) };
+        assert!(glass.contains("\"rule\": \"dantzig\""));
+        assert!(glass.contains("\"entering\""));
+        // Nothing in the glass is a claim, so no exact value appears in it.
+        assert!(!glass.contains("\"stated\""));
+    }
+
+    #[test]
+    fn the_outline_reads_a_certificate_the_way_the_verifier_does() {
+        let (instance, length) = handed(TINY);
+        let report = taken(unsafe { hc_solve_live(instance, length, 1, 100) });
+        let hex = report
+            .split("\"hex\": \"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("the certificate came back");
+        let proof: Vec<u8> = (0..hex.len() / 2)
+            .map(|at| u8::from_str_radix(&hex[at * 2..at * 2 + 2], 16).expect("hex"))
+            .collect();
+        let (held, proof_length) = handed(&proof);
+        let drawn = taken(unsafe { hc_outline(held, proof_length, instance, length) });
+        unsafe { hc_release(held, proof_length) };
+        unsafe { hc_release(instance, length) };
+        assert!(drawn.contains("\"read\": true"));
+        assert!(drawn.contains("\"accepted\": true"));
+        assert!(drawn.contains("\"kind\": \"assertion\""));
+        assert!(drawn.contains("\"kind\": \"terminator\""));
+    }
+
+    #[test]
+    fn the_corpus_can_be_driven_through_the_interface() {
+        let listed = taken(hc_tamper_cases());
+        assert!(listed.contains("\"name\": \"negated_multiplier\""));
+        assert!(listed.contains("\"expect\": \"HCC-"));
+
+        let (instance, length) = handed(TINY);
+        let report = taken(unsafe { hc_solve_live(instance, length, 1, 100) });
+        let hex = report
+            .split("\"hex\": \"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("the certificate came back");
+        let proof: Vec<u8> = (0..hex.len() / 2)
+            .map(|at| u8::from_str_radix(&hex[at * 2..at * 2 + 2], 16).expect("hex"))
+            .collect();
+        let (held, proof_length) = handed(&proof);
+        let (name, name_length) = handed(b"misstated_objective");
+        let answered = taken(unsafe {
+            hc_tamper(
+                name,
+                name_length,
+                held,
+                proof_length,
+                instance,
+                length,
+                core::ptr::null(),
+                0,
+            )
+        });
+        unsafe { hc_release(name, name_length) };
+        unsafe { hc_release(held, proof_length) };
+        unsafe { hc_release(instance, length) };
+
+        // Either the mutation had nothing to edit on this certificate, or it
+        // was applied and refused at the rule the corpus names. What must not
+        // happen is a forgery that verifies.
+        if answered.contains("\"applied\": true") {
+            assert!(answered.contains("\"accepted\": false"));
+            assert!(answered.contains("\"rejection\": \"HCC-POINT-04\""));
+        } else {
+            assert!(answered.contains("\"why\""));
+        }
+    }
+
+    #[test]
+    fn a_mutation_nobody_has_heard_of_is_answered_rather_than_applied() {
+        let (name, name_length) = handed(b"there_is_no_such_case");
+        let answered = taken(unsafe {
+            hc_tamper(
+                name,
+                name_length,
+                core::ptr::null(),
+                0,
+                core::ptr::null(),
+                0,
+                core::ptr::null(),
+                0,
+            )
+        });
+        unsafe { hc_release(name, name_length) };
+        assert!(answered.contains("\"applied\": false"));
     }
 
     #[test]

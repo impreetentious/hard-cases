@@ -22,6 +22,10 @@ hc-io = { path = "../hc-io" }
 hc-lp = { path = "../hc-lp" }
 hc-mip = { path = "../hc-mip" }
 hc-presolve = { path = "../hc-presolve" }
+# The tamper corpus, offered to a visitor exactly as the harness runs it. The
+# forger decodes and encodes certificates and verifies nothing, so having it in
+# this module changes nothing about who checks what.
+hc-tamper = { path = "../hc-tamper" }
 # The verifier, compiled into the same module and reached through its public
 # interface like any other caller. It shares nothing with the solver here
 # either: the isolation is a property of the crate, not of the binary it ends

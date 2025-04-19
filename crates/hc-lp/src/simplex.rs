@@ -128,6 +128,99 @@ pub struct Effort {
     pub escalations: u64,
 }
 
+/// One iteration of the search, as it happened.
+///
+/// A record rather than a claim: every field here is floating point and comes
+/// out of the search, so nothing in it may be cited by a proof. It exists so
+/// that a reader can watch the rule pick a column and the ratio test pick a
+/// row, which is the one part of a simplex that is worth looking at and the
+/// part every summary throws away.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pivot {
+    /// Which iteration this was, counting from zero.
+    pub iteration: u64,
+    /// One while infeasibility remains, two once the point is inside its
+    /// bounds and the real objective is in force.
+    pub phase: u8,
+    /// The column the pricing rule chose.
+    pub entering: usize,
+    /// Plus one when that column rises, minus one when it falls.
+    pub direction: i8,
+    /// The column that left the basis, absent when the step was a bound flip
+    /// and the basis did not change.
+    pub leaving: Option<usize>,
+    /// How far the entering column moved.
+    pub theta: f64,
+    /// The model's own objective at the point the step started from, whatever
+    /// objective the phase was minimizing.
+    pub objective: f64,
+    /// How far outside their bounds the basic columns sat.
+    pub infeasibility: f64,
+    /// Where the escalation ladder was standing.
+    pub rung: Rung,
+}
+
+/// Where a watched search writes its iterations.
+///
+/// Bounded on purpose. A search that ran for a million iterations would
+/// otherwise hand back a million records, and the caller that wanted them is a
+/// display with room for a few hundred. The count of what happened is kept
+/// separately from the records kept, so a truncated trail says so rather than
+/// looking like a short run.
+#[derive(Clone, Debug, Default)]
+pub struct Trail {
+    limit: usize,
+    seen: u64,
+    pivots: Vec<Pivot>,
+}
+
+impl Trail {
+    /// A trail that keeps at most this many iterations.
+    #[must_use]
+    pub fn of(limit: usize) -> Self {
+        Self {
+            limit,
+            seen: 0,
+            pivots: Vec::new(),
+        }
+    }
+
+    /// A trail that keeps nothing, for the callers that want none.
+    #[must_use]
+    pub const fn none() -> Self {
+        Self {
+            limit: 0,
+            seen: 0,
+            pivots: Vec::new(),
+        }
+    }
+
+    /// The iterations kept.
+    #[must_use]
+    pub fn pivots(&self) -> &[Pivot] {
+        &self.pivots
+    }
+
+    /// How many iterations happened, kept or not.
+    #[must_use]
+    pub const fn seen(&self) -> u64 {
+        self.seen
+    }
+
+    /// Whether the search outran the room this trail had.
+    #[must_use]
+    pub fn truncated(&self) -> bool {
+        self.seen > self.pivots.len() as u64
+    }
+
+    fn record(&mut self, pivot: Pivot) {
+        self.seen += 1;
+        if self.pivots.len() < self.limit {
+            self.pivots.push(pivot);
+        }
+    }
+}
+
 /// Degenerate iterations in a row before the ladder escalates.
 pub const STALL_ITERATIONS: u64 = 200;
 
@@ -246,6 +339,22 @@ pub fn solve(problem: &Problem, options: &Options) -> (Outcome, Effort) {
 /// Solves a problem from a given basis.
 #[must_use]
 pub fn solve_from(problem: &Problem, start: Basis, options: &Options) -> (Outcome, Effort) {
+    solve_watched(problem, start, options, &mut Trail::none())
+}
+
+/// Solves a problem from a given basis, writing each iteration into a trail.
+///
+/// The same search, watched. There is no second implementation and no flag
+/// that changes what the search does: `solve_from` is this function with a
+/// trail that keeps nothing, so what a watcher sees is what every other caller
+/// got.
+#[must_use]
+pub fn solve_watched(
+    problem: &Problem,
+    start: Basis,
+    options: &Options,
+    trail: &mut Trail,
+) -> (Outcome, Effort) {
     let tol = options.tol;
     let mut basis = start;
     let mut effort = Effort::default();
@@ -353,6 +462,12 @@ pub fn solve_from(problem: &Problem, start: Basis, options: &Options) -> (Outcom
             tol,
         );
 
+        let leaving = match &step {
+            Step::Blocked { leaving, .. } => Some(*leaving),
+            Step::BoundFlip { .. } | Step::Unbounded => None,
+        };
+        let theta = step.theta();
+
         match step {
             Step::Unbounded => {
                 if phase.infeasibility > tol.feas {
@@ -439,6 +554,17 @@ pub fn solve_from(problem: &Problem, start: Basis, options: &Options) -> (Outcom
             }
         }
 
+        trail.record(Pivot {
+            iteration: effort.iterations,
+            phase: if phase.infeasibility > tol.feas { 1 } else { 2 },
+            entering: entering.column,
+            direction: if entering.direction > 0.0 { 1 } else { -1 },
+            leaving,
+            theta,
+            objective: problem.objective_at(&point),
+            infeasibility: phase.infeasibility,
+            rung,
+        });
         effort.iterations += 1;
 
         // The escalation ladder. A run of steps that move nowhere is the only
@@ -963,5 +1089,88 @@ mod tests {
         let (outcome, effort) = solve(&empty, &Options::default());
         assert!(matches!(outcome, Outcome::Optimal { .. }));
         assert_eq!(effort.iterations, 0);
+    }
+
+    #[test]
+    fn a_watched_search_records_the_run_the_unwatched_one_performs() {
+        let source = concat!(
+            "ROWS\n N obj\n L c1\n L c2\n L c3\n",
+            "COLUMNS\n x obj -5 c1 2\n x c2 4 c3 3\n",
+            " y obj -4 c1 3\n y c2 1 c3 4\n",
+            " z obj -3 c1 1\n z c2 2 c3 2\n",
+            "RHS\n r c1 5 c2 11\n r c3 8\n",
+            "ENDATA\n"
+        );
+        let problem = problem(source);
+        let options = Options {
+            rule: Rule::Dantzig,
+            ..Options::default()
+        };
+
+        let (quiet, spent) = solve(&problem, &options);
+        let mut trail = Trail::of(64);
+        let (watched, also) =
+            solve_watched(&problem, Basis::logical(&problem), &options, &mut trail);
+
+        // Watching changes nothing about the search.
+        assert_eq!(spent, also);
+        assert!((optimum(&quiet).0 - optimum(&watched).0).abs() < FENCE);
+
+        // And the trail is the iterations that were counted, in order.
+        assert_eq!(trail.seen(), spent.iterations);
+        assert_eq!(trail.pivots().len() as u64, spent.iterations);
+        assert!(!trail.truncated());
+        for (at, pivot) in trail.pivots().iter().enumerate() {
+            assert_eq!(pivot.iteration, at as u64);
+            assert!(pivot.entering < problem.columns());
+            assert!(pivot.theta.is_finite(), "a recorded step went nowhere far");
+            assert!(matches!(pivot.direction, 1 | -1));
+            if let Some(left) = pivot.leaving {
+                assert!(left < problem.columns());
+            }
+        }
+        // This fixture starts feasible at the origin, so every step is second
+        // phase, and each record carries the objective the step began from.
+        // The first is therefore the origin's and the last is one vertex short
+        // of the answer, which is the whole reason a trail is worth watching.
+        assert!(trail.pivots().iter().all(|pivot| pivot.phase == 2));
+        assert_eq!(trail.pivots()[0].objective, 0.0);
+        for pair in trail.pivots().windows(2) {
+            assert!(
+                pair[1].objective <= pair[0].objective + FENCE,
+                "the objective rose between iterations"
+            );
+        }
+        let last = trail.pivots().last().expect("the fixture pivots");
+        assert!(optimum(&watched).0 <= last.objective + FENCE);
+    }
+
+    #[test]
+    fn a_trail_that_runs_out_of_room_says_so_rather_than_looking_short() {
+        let source = concat!(
+            "ROWS\n N obj\n L c1\n L c2\n L c3\n",
+            "COLUMNS\n x obj -5 c1 2\n x c2 4 c3 3\n",
+            " y obj -4 c1 3\n y c2 1 c3 4\n",
+            " z obj -3 c1 1\n z c2 2 c3 2\n",
+            "RHS\n r c1 5 c2 11\n r c3 8\n",
+            "ENDATA\n"
+        );
+        let problem = problem(source);
+        let options = Options {
+            rule: Rule::Dantzig,
+            ..Options::default()
+        };
+        let mut trail = Trail::of(1);
+        let (_, spent) = solve_watched(&problem, Basis::logical(&problem), &options, &mut trail);
+        assert!(spent.iterations > 1, "the fixture pivots more than once");
+        assert_eq!(trail.pivots().len(), 1);
+        assert_eq!(trail.seen(), spent.iterations);
+        assert!(trail.truncated());
+
+        // And a trail with no room at all still counts what happened.
+        let mut none = Trail::none();
+        let _ = solve_watched(&problem, Basis::logical(&problem), &options, &mut none);
+        assert!(none.pivots().is_empty());
+        assert_eq!(none.seen(), spent.iterations);
     }
 }

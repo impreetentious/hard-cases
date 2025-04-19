@@ -104,6 +104,7 @@ shows the machinery that catches it.
   rejection identifiers, and hand-worked vectors. Code is never the source of
   truth
 - [`tamper/README.md`](tamper/README.md) — the corrupted-certificate corpus
+- [`theater/README.md`](theater/README.md) — the situation room
 
 ## Contributing
 
@@ -123,4 +124,4 @@ SPDX identifier is `MIT`.
 
 ---
 
-**Version:** v0.12.6
+**Version:** v0.12.7

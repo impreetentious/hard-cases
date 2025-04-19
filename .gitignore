@@ -3,6 +3,21 @@
 *.log
 theater/node_modules/
 theater/dist/
+theater/test-results/
+theater/playwright-report/
+/test-results/
+
+# What the page serves, collected from what the build just produced by
+# theater/scripts/prepare.mjs. None of it is committed: the module is a build
+# artifact, the instances are copies of files that are already here, the case
+# files are parsed out of their Markdown, and the recording is made by the
+# command line. Committing any of it would mean a second copy to go stale, and
+# the largest of them is a megabyte of WebAssembly.
+theater/public/hc.wasm
+theater/public/built.json
+theater/public/case-files.json
+theater/public/instances/
+theater/public/recorded/
 /artifacts/
 /out/
 

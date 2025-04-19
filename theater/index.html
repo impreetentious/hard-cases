@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hard Cases — the situation room</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="A mixed-integer solver that proves its answers, running in the page, with an independent verifier rechecking every claim it makes."
+    />
+  </head>
+  <body>
+    <div id="room"></div>
+    <noscript>
+      <p style="font: 14px system-ui; color: #e6ecf3; background: #0a0c0f; margin: 0; padding: 24px">
+        The situation room solves a mixed-integer program in this tab and has an
+        independent verifier recheck the proof, so it needs scripting to do
+        anything at all. There is no server behind it and nothing to fetch from
+        one. The same solver runs on the command line, and the repository this
+        page was built from explains what it proves and what it does not.
+      </p>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

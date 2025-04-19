@@ -50,6 +50,10 @@ const expected = [
   "hc_solve_live",
   "hc_replay",
   "hc_recheck",
+  "hc_pivots",
+  "hc_outline",
+  "hc_tamper_cases",
+  "hc_tamper",
   "hc_version",
 ];
 for (const name of expected) {
@@ -103,6 +107,9 @@ check(typeof refused.refused === "string", "a refusal carried no message");
 const proof = Uint8Array.from(
   report.certificate.hex.match(/../g).map((pair) => Number.parseInt(pair, 16)),
 );
+// Kept undamaged: the corpus below forges from a genuine certificate, and the
+// copy above is about to have a byte changed in it.
+const proofBytes = proof.slice();
 const [proofPointer, proofLength] = give(proof);
 const [modelPointer, modelLength] = give(model);
 const accepted = JSON.parse(
@@ -110,6 +117,19 @@ const accepted = JSON.parse(
 );
 check(accepted.accepted === true, "the verifier refused an untouched certificate");
 check(accepted.work > 0, "the verifier reported no work");
+
+// The outline: the same certificate as the verifier's own reader sees it, with
+// the verdict beside it.
+const outline = JSON.parse(
+  take(api.hc_outline(proofPointer, proofLength, modelPointer, modelLength)),
+);
+check(outline.read === true, "the outline could not read an untouched certificate");
+check(outline.accepted === true, "the outline refused an untouched certificate");
+check(outline.steps.at(-1)?.kind === "terminator", "the outline does not end at the terminator");
+check(
+  outline.steps.some((step) => step.kind === "assertion"),
+  "the outline shows no assertion",
+);
 
 proof[Math.floor(proof.length / 2)] ^= 1;
 new Uint8Array(api.memory.buffer, proofPointer, proofLength).set(proof);
@@ -121,8 +141,97 @@ check(
   typeof rejected.rejection === "string" && rejected.rejection.startsWith("HCC-"),
   "a refusal named no rule",
 );
+
+// A damaged certificate names the rule that stopped it whether or not enough
+// of it still reads, which is the pair the tamper lab draws.
+const damaged = JSON.parse(
+  take(api.hc_outline(proofPointer, proofLength, modelPointer, modelLength)),
+);
+check(damaged.accepted === false, "the outline accepted a damaged certificate");
+check(
+  typeof damaged.rejection === "string" && damaged.rejection.startsWith("HCC-"),
+  "the outline of a damaged certificate named no rule",
+);
 api.hc_release(proofPointer, proofLength);
+
+// The glass: the root relaxation under the textbook rule, every pivot of it.
+// Nothing in it is a claim, and that is checkable rather than assertable — an
+// exact quantity is a string everywhere in this project, and the glass has
+// none.
+const glass = JSON.parse(take(api.hc_pivots(modelPointer, modelLength, 1, 64)));
 api.hc_release(modelPointer, modelLength);
+check(glass.rule === "dantzig", "the glass ran another pricing rule");
+check(Array.isArray(glass.pivots), "the glass reported no pivots");
+check(glass.columns.length > 0, "the glass named no columns");
+check(
+  glass.pivots.every((pivot) => typeof pivot.theta === "number" && pivot.phase >= 1),
+  "a recorded pivot was not a float record",
+);
+check(glass.kept === glass.pivots.length, "the glass miscounted what it kept");
+check(
+  glass.truncated === glass.iterations > glass.kept,
+  "the glass misreported truncation",
+);
+
+// The tamper corpus, driven here rather than only in the harness: every entry
+// that applies to this certificate has to be refused, in the module the page
+// actually loads, by a rule that has a name.
+//
+// Refused, rather than refused by the identifier the corpus pins. That pin is
+// the earliest rule that can see the defect on the corpus's own models, and
+// "earliest" is a property of the model as well as of the mutation: moving an
+// incumbent a thousand units is caught by the row check on a model with an
+// upper bound in the way and by the objective check on one without. The pin is
+// held to on the models it was written for, in the harness. What must hold on
+// every model, and is what this checks, is that no forgery is ever accepted.
+const cases = JSON.parse(take(api.hc_tamper_cases()));
+check(cases.length > 0, "the module offers no tamper corpus");
+const encoder = new TextEncoder();
+// A second file for the one entry that reattaches a certificate to another
+// instance. A trailing newline is enough: the digest is over the bytes.
+const otherModel = new Uint8Array(model.length + 1);
+otherModel.set(model);
+otherModel[model.length] = 10;
+let applied = 0;
+let pinned = 0;
+for (const entry of cases) {
+  const [namePointer, nameLength] = give(encoder.encode(entry.name));
+  const [certPointer, certLength] = give(proofBytes);
+  const [instPointer, instLength] = give(model);
+  const [otherPointer, otherLength] = give(otherModel);
+  const answered = JSON.parse(
+    take(
+      api.hc_tamper(
+        namePointer,
+        nameLength,
+        certPointer,
+        certLength,
+        instPointer,
+        instLength,
+        otherPointer,
+        otherLength,
+      ),
+    ),
+  );
+  api.hc_release(namePointer, nameLength);
+  api.hc_release(certPointer, certLength);
+  api.hc_release(instPointer, instLength);
+  api.hc_release(otherPointer, otherLength);
+  if (!answered.applied) {
+    check(typeof answered.why === "string", `${entry.name} did not say why it was skipped`);
+    continue;
+  }
+  applied += 1;
+  check(answered.outline.accepted === false, `${entry.name} was accepted`);
+  check(
+    typeof answered.outline.rejection === "string" &&
+      answered.outline.rejection.startsWith("HCC-"),
+    `${entry.name} was refused without naming a rule`,
+  );
+  if (answered.outline.rejection === entry.expect) pinned += 1;
+}
+check(applied > 0, "no tamper entry applied to this certificate");
+check(pinned > 0, "no forgery was answered by the rule the corpus pins it to");
 
 if (failures.length) {
   console.error("wasm-smoke: FAILED");
@@ -130,5 +239,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  `wasm-smoke: OK — ${expected.length} export(s), a live solve verified, a damaged certificate refused`,
+  `wasm-smoke: OK — ${expected.length} export(s), a live solve verified, ${glass.pivots.length} pivot(s) watched, ${outline.steps.length} record(s) outlined, ${applied} forgery(s) refused (${pinned} at the rule the corpus pins)`,
 );

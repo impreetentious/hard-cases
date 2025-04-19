@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>Hard Cases</title>
+  <rect width="32" height="32" rx="5" fill="#0a0c0f"/>
+  <path d="M16 6 L16 12 M16 12 L9 20 M16 12 L23 20" stroke="#7a8899" stroke-width="1.6" fill="none"/>
+  <circle cx="16" cy="6" r="3" fill="none" stroke="#e0a458" stroke-width="1.8"/>
+  <circle cx="9" cy="21" r="3" fill="#4fd1c5" stroke="#4fd1c5" stroke-width="1.8"/>
+  <circle cx="23" cy="21" r="3" fill="none" stroke="#e0a458" stroke-width="1.8"/>
+</svg>
