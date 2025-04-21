@@ -11,8 +11,8 @@ close the highest-risk architectural choices before implementation begins.
 
 ## Decisions
 
-1. **MIT license** — solvers are infrastructure; embedding is the point and
-   nothing here needs copyleft.
+1. **Apache-2.0 license** — solvers are infrastructure; embedding is the point
+   and nothing here needs copyleft.
 2. **The proof calculus is frozen before the solver** — canonicalization,
    claim semantics, the certificate grammar, transform rules, cut formulas, and
    rejection identifiers are inert checked-in assets with hand-worked positive

@@ -89,7 +89,7 @@ readers accept. That is a real cost, it will be visible on the scoreboard, and
 Every decision here is versioned. Changing the canonical dump, the digest input,
 or an MPS reading bumps the canonicalization version; changing the header, a
 record code, or an encoding rule bumps the HCC version. Either one requires
-regenerated fixtures under `verifier-vectors/` and `tamper/`.
+regenerated fixtures under `spec/v1/vectors/` and `tamper/`.
 
 ## Alternatives considered
 

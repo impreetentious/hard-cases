@@ -38,7 +38,7 @@ normative rule requires, together and in the same change:
 1. an ADR recording what changed and why;
 2. a version bump of whichever contract moved — canonicalization, HCC, or the
    trace schema;
-3. regenerated fixtures under `verifier-vectors/` and `tamper/`.
+3. regenerated fixtures under `spec/v1/vectors/` and `tamper/`.
 
 The rejection identifiers in `rejections.toml` are a public interface. `hc
 verify` prints them, the tamper lab displays them, and the case files cite them.

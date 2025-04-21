@@ -67,7 +67,7 @@ fn the_campaign_is_reproducible() {
 }
 
 /// The nightly size. Ignored in the ordinary suite so a preflight does not pay
-/// for it, and run by name in the scheduled build.
+/// for it, and run with `--ignored` by the `check` workflow.
 #[test]
 #[ignore = "nightly size; run with --ignored"]
 fn the_nightly_tiny_campaign_is_clean() {

@@ -32,4 +32,3 @@ theater/public/recorded/
 # Solver output
 *.hcc
 !tamper/**/*.hcc
-!verifier-vectors/**/*.hcc

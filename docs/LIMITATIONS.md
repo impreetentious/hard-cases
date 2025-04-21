@@ -113,13 +113,14 @@ instances it did not generate rests on twelve hand-written models.
 
 ## What the campaigns establish
 
-Two campaigns run on every change and again at a larger size in the scheduled
-build. The certification campaign generates linear programs, solves them,
-assembles certificates, and requires the standalone verifier to accept every one
-and the accepted claim to agree with a dense reference solver. The tiny
-integer campaign does the same for small integer programs and adds a third
-answer: enumeration over every point in the box, which shares no idea with the
-search at all.
+Two campaigns run on every change at a per-change size. The `check` workflow
+runs them again at a larger size, along with the dual simplex campaign and the
+deterministic fuzzer at its nightly budget. The certification campaign
+generates linear programs, solves them, assembles certificates, and requires
+the standalone verifier to accept every one and the accepted claim to agree
+with a dense reference solver. The tiny integer campaign does the same for
+small integer programs and adds a third answer: enumeration over every point
+in the box, which shares no idea with the search at all.
 
 They establish that the implementations agree on the instances generated. They
 do not establish anything about instances outside those shapes, and both

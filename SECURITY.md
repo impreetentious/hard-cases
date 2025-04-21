@@ -21,6 +21,8 @@ in every sense that matters here: send the original model bytes, the
 certificate, and the claim it makes.
 
 Please do not disclose a suspected vulnerability in a public issue before I
-have had a chance to assess it. Use my private security contact and include the
-affected build, the exact command, and the smallest reproducing input. Models
-and seeds may be shared publicly after triage.
+have had a chance to assess it. Email sps.daemon@gmail.com, or use GitHub
+private vulnerability reporting / a GitLab confidential issue if this
+repository is hosted there. Include the affected build, the exact command, and
+the smallest reproducing input. Models and seeds may be shared publicly after
+triage.

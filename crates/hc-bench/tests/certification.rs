@@ -93,7 +93,7 @@ fn certificates_and_the_numbers_inside_them_stay_far_inside_their_caps() {
 }
 
 /// The nightly size. Ignored in the ordinary suite so that a preflight does
-/// not pay for it, and run by name in the scheduled build.
+/// not pay for it, and run with `--ignored` by the `check` workflow.
 #[test]
 #[ignore = "nightly size; run with --ignored"]
 fn the_nightly_certification_campaign_is_clean() {

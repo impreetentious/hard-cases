@@ -160,11 +160,22 @@ pub fn search(raw: &[u8], settings: &Settings) -> Result<Solved, String> {
 
     // A supplied solution is over the reduced model's variables, because that
     // is the model the search is about. It is screened inside the search, like
-    // every other candidate.
-    let start = settings
-        .solution
-        .as_ref()
-        .and_then(|values| hc_mip::extend(&hc_lp::exact::Canonical::of(reduced), values));
+    // every other candidate. A file of the wrong length is a mistaken file,
+    // not a hint to ignore: dropping it would search without the start the
+    // caller named and report an answer as if the start had been used.
+    let start = match settings.solution.as_ref() {
+        None => None,
+        Some(values) => {
+            let canonical = hc_lp::exact::Canonical::of(reduced);
+            Some(hc_mip::extend(&canonical, values).ok_or_else(|| {
+                format!(
+                    "the solution has {} values and the searched model has {} variables",
+                    values.len(),
+                    canonical.structural()
+                )
+            })?)
+        }
+    };
     let options = MipOptions {
         cut_rounds: if settings.cuts { CUT_ROUNDS } else { 0 },
         start,
@@ -567,6 +578,25 @@ mod tests {
         assert!(
             out.contains("U = -4"),
             "the search should reach its own answer"
+        );
+    }
+
+    #[test]
+    fn a_solution_of_the_wrong_length_is_refused_rather_than_dropped() {
+        let settings = Settings {
+            presolve: false,
+            solution: Some(vec![
+                hc_exact::Rational::from_i64(1),
+                hc_exact::Rational::from_i64(2),
+            ]),
+            ..Settings::default()
+        };
+        let Err(message) = search(TINY, &settings) else {
+            panic!("a solution of the wrong length was accepted");
+        };
+        assert!(
+            message.contains("2 values") && message.contains("1 variable"),
+            "{message}"
         );
     }
 

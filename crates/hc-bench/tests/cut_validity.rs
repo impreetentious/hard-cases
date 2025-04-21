@@ -70,7 +70,7 @@ fn a_second_stream_removes_none_either() {
 }
 
 #[test]
-#[ignore = "the nightly campaign; run it by name or under the nightly job"]
+#[ignore = "nightly size; run with --ignored"]
 fn the_nightly_campaign_removes_no_feasible_integer_point() {
     let report = run(0xc07_0000_0003, NIGHTLY);
     expect_clean(&report);

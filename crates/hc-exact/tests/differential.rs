@@ -13,8 +13,8 @@
 //! normalization bug lives.
 //!
 //! The default run is small enough to sit inside a local preflight. The full
-//! campaign is the same code with a larger count, run under its own name so a
-//! nightly job can ask for it without the ordinary suite paying for it.
+//! campaign is the same code with a larger count, run under its own name so it
+//! can be asked for with `--ignored` without the ordinary suite paying for it.
 
 use hc_core::Xoshiro256PlusPlus;
 use hc_exact::{BigInt, BigUint, Rational};
@@ -252,7 +252,7 @@ fn the_campaign_is_reproducible() {
 }
 
 #[test]
-#[ignore = "the full campaign; run it by name or under the nightly job"]
+#[ignore = "the full campaign; run with --ignored"]
 fn the_full_campaign_finds_no_disagreement() {
     campaign(FULL_ROUNDS, 0);
 }

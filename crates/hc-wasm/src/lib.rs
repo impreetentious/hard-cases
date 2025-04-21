@@ -324,6 +324,11 @@ fn report(
 }
 
 /// A string as a JSON string.
+///
+/// The accepted instance grammar admits a tab inside a name (via a JSON `\t`
+/// escape) and refusal messages can carry quotes or other controls. A raw
+/// control character here would make the page's `JSON.parse` throw, which is
+/// a crash on a file this module otherwise accepted.
 fn quoted(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 2);
     out.push('"');
@@ -332,6 +337,11 @@ fn quoted(text: &str) -> String {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
             '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other if (other as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", other as u32);
+            }
             other => out.push(other),
         }
     }
@@ -1065,5 +1075,35 @@ mod tests {
     fn an_instance_that_does_not_read_comes_back_as_a_message() {
         assert!(solve_live(b"not an instance\n", 1, 10).is_err());
         assert!(solve_live(TINY, 9, 10).is_err(), "no format has tag nine");
+    }
+
+    #[test]
+    fn a_name_that_needs_json_escapes_still_produces_a_document() {
+        // The JSON grammar admits `\t` and `\"` in a name. Those become a tab
+        // and a quote in the model; the page must receive them escaped again
+        // or `JSON.parse` throws on a file this module accepted.
+        let raw = br#"{
+  "version": 1,
+  "sense": "min",
+  "objective_constant": "0",
+  "vars": [{"name": "x\t\"y", "lb": "0", "ub": "1", "integer": false, "obj": "-1"}],
+  "rows": [],
+  "nonzeros": []
+}
+"#;
+        let glass = pivots(raw, 4, 8).expect("a readable instance");
+        assert!(
+            !glass.contains('\t'),
+            "a raw tab is not valid inside a JSON string"
+        );
+        assert!(
+            glass.contains(r#"x\t\"y"#),
+            "the name's tab and quote must be escaped: {glass}"
+        );
+        // A live solve may drop the column under presolve, so the name need
+        // not appear in that report; the report still has to be a document.
+        let live = solve_live(raw, 4, 10).expect("a readable instance");
+        assert!(!live.contains('\t'), "{live}");
+        assert!(live.contains("\"provenance\": \"live\""), "{live}");
     }
 }

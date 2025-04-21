@@ -32,12 +32,12 @@ recheck it, and renders what happened. A test regenerates it and diffs, so a
 change to the search that changes the tree redraws the figure in the same
 commit.
 
-**[Open the situation room →](https://itsmonarch04.github.io/hard-cases/)** The
-same engine runs in your browser, compiled to WebAssembly with no server behind
-it: watch a real solve build its tree, click any node to see why it was closed,
-pause the search after one node and certify the gap that is left, then open the
-tamper lab, edit a byte of the proof, repair its checksum, and watch the
-verifier name the rule that refuses it.
+The [situation room](theater/README.md) runs the same engine in the browser,
+compiled to WebAssembly with no server behind it: watch a real solve build its
+tree, click any node to see why it was closed, pause the search after one node
+and certify the gap that is left, then open the tamper lab, edit a byte of the
+proof, repair its checksum, and watch the verifier name the rule that refuses
+it.
 
 Everything the page draws comes from a solve it just performed or from a run
 recorded by the command line and replayed, and it says which at all times.
@@ -161,19 +161,17 @@ units that are not seconds.
 ## Contributing
 
 See [the contribution guide](docs/contributing.md), the numbered decisions in
-[`docs/adr/`](docs/adr/), and the pull-request checklist. Every change needs
-tests and a clean local preflight. The verifier acquires no dependency and no
-shared code, ever; changing a proof rule requires a hand-worked derivation and a
+[`docs/adr/`](docs/adr/), and the [pull-request
+checklist](.github/PULL_REQUEST_TEMPLATE.md). Every change needs tests and a
+clean local preflight. The verifier acquires no dependency and no shared
+code, ever; changing a proof rule requires a hand-worked derivation and a
 versioned decision record.
 
 ## License
 
-Copyright (c) 2024-2025 Sidakpreet Singh.
-
-Hard Cases is released under the MIT License — solvers are infrastructure, and
-embedding is the point. The complete license text is in [LICENSE](LICENSE); the
-SPDX identifier is `MIT`.
+Apache-2.0 © 2024-2025 Sidakpreet Singh — see [LICENSE](LICENSE). Solvers are
+infrastructure, and embedding is the point.
 
 ---
 
-**Version:** v0.13.0
+**Version:** v0.13.1

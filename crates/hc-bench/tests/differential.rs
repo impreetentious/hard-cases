@@ -103,7 +103,7 @@ fn the_campaign_is_reproducible() {
 }
 
 #[test]
-#[ignore = "the nightly campaign; run it by name or under the nightly job"]
+#[ignore = "nightly size; run with --ignored"]
 fn the_nightly_campaign_finds_no_disagreement() {
     let report = run(0x0d1f_0001, NIGHTLY);
     expect_agreement(&report);

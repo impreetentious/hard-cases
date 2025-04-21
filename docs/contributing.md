@@ -9,8 +9,13 @@ works to follow.
 - Run `cargo fmt --all -- --check`.
 - Run `cargo clippy --workspace --all-targets -- -D warnings`.
 - Run `./scripts/ci/forbidden-grep.sh` and the verifier isolation check.
-- Run `./scripts/preflight.sh`. It is the local mirror of the `check` workflow
-  and runs the same steps in the same order.
+- Run `./scripts/preflight.sh`. It is the local mirror of the `check`
+  workflow's always-on steps, in the same order. Continuous integration also
+  runs the workspace tests unoptimized, the certification, tiny integer, and
+  dual simplex campaigns at their nightly sizes, the fuzzer at its nightly
+  budget, and `cargo doc`. The cut validity, solver differential, and exact
+  arithmetic campaigns have no automatic run: ask for them by hand with
+  `--ignored` when a change touches what they cover.
 - The suite runs under release inside the preflight, because the campaigns are
   sized by the normative constants and running them unoptimized costs minutes
   per change without covering anything more. The unit tests are run unoptimized
@@ -90,5 +95,3 @@ The three visual states are float, exact-and-unchecked, and verified, and they
 are never drawn the same way. Collapsing the middle one understates what exact
 assembly did in one direction and makes the project's central claim in the
 other.
-
-Commits, tags, and releases are the repository owner's to make.
