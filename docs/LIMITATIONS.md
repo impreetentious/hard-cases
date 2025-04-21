@@ -87,6 +87,30 @@ refusal is the honest response and a skip is not. The section stays because the
 format is expected to grow again, and a rule that lands without its hand-worked
 vectors lands here first.
 
+## What the committed corpora establish, and what is absent
+
+Twelve instance files are committed and gates consume all of them. Eight are
+linear and are solved twice, once by the revised simplex and once by a dense
+textbook tableau that links none of the production linear algebra. Four are
+mixed-integer: every one must assemble a certificate the standalone verifier
+accepts, three are small enough that every assignment in their integer boxes is
+enumerated and the enumerated answer is compared by exact value, and all four
+are solved with separation and without and must agree about the value.
+
+They are small, and they are small on purpose: an instance a person can hold in
+their head is an instance whose answer a person can check. They establish
+nothing about the shapes they do not contain.
+
+**The two fetched collections are absent.** The netlib linear programs and a
+fixed MIPLIB 2017 subset each have a manifest naming exactly which instances
+they cover, a fetch script that records a digest on first fetch and verifies it
+afterwards, and a harness that runs whatever is present and names what is not.
+No file from either has been fetched into this repository, so no result from
+either appears anywhere in it, and `docs/scoreboard.md` says so rather than
+covering only what is committed and calling that the board. Until they are
+fetched and run, every claim this project makes about how it behaves on
+instances it did not generate rests on twelve hand-written models.
+
 ## What the campaigns establish
 
 Two campaigns run on every change and again at a larger size in the scheduled
@@ -176,10 +200,39 @@ it.
 
 ## What the browser surface is
 
-One WebAssembly module with three entry points: a bounded live solve, a replay
-of a recorded trace and certificate, and the verifier alone behind a thin
-wrapper. Every result says which of the first two produced it, because a panel
-that could not tell a live solve from a recording would label one as the other.
+One WebAssembly module. Three entry points produce results — a bounded live
+solve, a replay of a recorded trace and certificate, and the verifier alone
+behind a thin wrapper — and every result says which of the first two produced
+it, because a panel that could not tell a live solve from a recording would
+label one as the other.
+
+Three more exist to look at things rather than to produce them. One runs the
+root relaxation under the textbook pricing rule and reports every pivot it
+made; it is the ordinary search with a recording trail attached, not a second
+implementation, and nothing it reports is exact or is a claim. One reads a
+certificate through the verifier's own reader and reports the structure beside
+the verdict, so the page draws what the checker saw rather than what the
+assembler meant. One applies a named mutation from the tamper corpus and
+re-verifies, so a visitor can break a proof without a toolchain.
+
+The page's node budget is the only limit on a live solve, and it is a limit on
+nodes rather than on seconds so that the same instance behaves the same way on
+every machine. A solve that reaches it produces a certified gap rather than an
+unproved number.
+
+The page will also take a model of the reader's own. The format is named on a
+control rather than guessed from the file, for the same reason the command line
+names it: the format tag is part of the instance digest, so the same bytes read
+two ways are two instances. Such a file is read by the browser and handed to
+the module in the same tab; there is no server behind the page and nothing is
+uploaded, so the address bar — which otherwise carries the whole view — cannot
+carry it, and the share control says so instead of producing a link that would
+open on something else.
+
+A replay is refused unless the trace is about *this* certificate as well as
+about this instance: a trace records the length and the trailing checksum of the
+proof its own run assembled, and two genuine artifacts of two different runs of
+the same model are the easiest facade to assemble here by accident.
 
 A replay rechecks the certificate rather than displaying the verdict it was
 recorded with. A recorded verdict is a claim about a run nobody in the room
@@ -212,10 +265,21 @@ assembler cannot source is an event it does not write, and a schema field it has
 no value for is a reason not to write that event at all — so a trace is short
 where a run was, and no panel reading one can draw a number nobody measured.
 
-The escalation events the schema reserves are not produced yet: the linear
-search counts its escalations but does not record which rung each one reached,
-so nothing here can say. The schema carries the event because the rung has a
-name and a place; the assembler writes none until the search keeps them.
+Two of the events the schema reserves are not produced. The linear search counts
+its escalations but does not record which rung each one reached, so no
+escalation event can be written. The tree search tracks no running global bound
+— it compares each node against the incumbent and never forms the minimum over
+the open ones — so no search-gap event can be written either. Both could be
+computed after the fact from what *is* recorded, and computing them is exactly
+what this rule forbids: an event assembled from a derivation is an event about a
+search that did not report it. The schema carries them because each has a name
+and a place, and the assembler writes neither until the search keeps them.
+
+What the assembler does write, it writes from exact quantities the search
+already holds: a node closed by a bound carries the bound the basis established,
+an integral leaf carries the objective its point attains, and a branch carries
+the integer the split was taken at. Those are rationals, they are the numbers
+the certificate cites for the same nodes, and none of them is recomputed here.
 
 ## What the determinism gate compares
 

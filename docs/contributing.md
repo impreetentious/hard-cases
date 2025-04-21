@@ -18,6 +18,28 @@ works to follow.
   and continuous integration runs everything both ways.
 - Add a named regression test for every known failure mode the change touches.
 - Update the public rustdoc for anything you changed.
+- The last two preflight steps need a browser and a Node toolchain: the page is
+  built from what the Rust build just produced, held to byte budgets, and
+  driven against the built bundle. Both say which command installs what they
+  are missing. Neither skips.
+
+## The generated documents
+
+Three things in this repository are written by a program and diffed by a test,
+and editing any of them by hand fails the suite:
+
+- `docs/formats/` is generated from the inert assets in `spec/v1`. Neither
+  implementation gets to be its own specification.
+- `docs/scoreboard.md`, `docs/proof-tree.svg`, and the counter block in
+  `README.md` come from `cargo run -p hc-bench --bin scoreboard`. The board is
+  a real run of the committed corpora, the figure is a real solve with the
+  verifier's answer in its caption, and the counters are measured at generation
+  time. A change to the search that moves an iteration count is a change that
+  updates all three in the same commit.
+- Every relative link in every document — and every path inside a shell
+  example that looks like a path into this repository — is checked to exist.
+  The front page once named six essays, a demo script, a recorded animation and
+  two instance files, none of which did.
 
 ## The two arithmetics
 
@@ -55,5 +77,18 @@ Numbered decision records in `docs/adr/` are append-only. If a change crosses a
 crate boundary, touches a file or certificate format, or affects what a claimed
 status means, write the record before the implementation. Formats carry
 versions; changing one bumps the version and regenerates its fixtures.
+
+## The situation room
+
+Everything the page draws comes from a solve the module performed or from a
+recorded trace and certificate it replayed, and the header says which at all
+times. A panel with nothing behind it stays empty and says so; a panel computed
+live under a replay says that too. Adding a panel means answering where its
+contents came from before writing it.
+
+The three visual states are float, exact-and-unchecked, and verified, and they
+are never drawn the same way. Collapsing the middle one understates what exact
+assembly did in one direction and makes the project's central claim in the
+other.
 
 Commits, tags, and releases are the repository owner's to make.

@@ -1,0 +1,60 @@
+# The situation room, published.
+#
+# Only from the default branch, and only after the page has been built, held to
+# its budgets, and driven in a browser — the same script a person runs locally.
+# A published page that no gate had passed would be the one artifact of this
+# project nobody had checked, which would be a strange thing for this project
+# to ship.
+#
+# The workflow does not run on pull requests. A page is published or it is not;
+# there is nothing useful to publish from a branch, and a deployment permission
+# that is granted on every branch is a deployment permission that is granted to
+# every change.
+
+name: site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions-rust-lang/setup-rust-toolchain@11df97af8e8102fd60b60a77dfbf58d40cd843b8 # v1.10.1
+        with:
+          toolchain: 1.85.0
+      - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: theater/package-lock.json
+      # The module the page loads, and the command line that makes the
+      # recording it replays. Both are built here rather than downloaded, so
+      # the published page is running the version of the solver in this commit.
+      - run: cargo build --release --target wasm32-unknown-unknown -p hc-wasm
+      - run: cargo build --release -p hc-cli
+      - run: npm --prefix theater ci
+      - run: npx --prefix theater playwright install --with-deps chromium
+      - run: ./scripts/ci/theater.sh
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: theater/dist
+      - id: deploy
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
