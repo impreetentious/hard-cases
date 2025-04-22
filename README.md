@@ -21,10 +21,10 @@ at all, and its trust boundary is published rather than described as magic. What
 that boundary does and does not include is spelled out in
 [limitations](docs/LIMITATIONS.md).
 
-![The certified proof tree of a small fixed-charge model: five nodes, one split
-into two, and each leaf closed by a contradiction, by a bound, or by an
-integral point attaining its own bound — with the certificate's size and the
-verifier's work underneath.](docs/proof-tree.svg)
+![The certified proof tree of a small fixed-charge model: five nodes, two of
+them split on a binary column, and each of the three leaves closed by a
+contradiction, by a bound, or by an integral point attaining its own bound —
+with the certificate's size and the verifier's work underneath.](docs/proof-tree.svg)
 
 That picture is generated, not drawn: `cargo run -p hc-bench --bin scoreboard`
 solves the instance, assembles the certificate, has the standalone verifier
@@ -174,4 +174,4 @@ infrastructure, and embedding is the point.
 
 ---
 
-**Version:** v0.13.2
+**Version:** v0.13.3

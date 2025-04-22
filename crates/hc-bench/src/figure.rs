@@ -121,9 +121,23 @@ pub fn render() -> String {
             parent: entry.parent,
             depth: entry.depth,
             assumption: entry.assumption.as_ref().map(|assumption| {
+                // The column the file named, not the position it sits at. A
+                // branch cites a column of the *reduced* model, so the name is
+                // taken from that model rather than from the original bytes,
+                // which presolve may have removed columns from — the situation
+                // room names it the same way and has a test forbidding the
+                // index. The figure printed the index, which sent a reader who
+                // opened the instance looking for a column that is not in it.
+                let named = chain
+                    .reduced
+                    .variables()
+                    .get(assumption.column)
+                    .map_or_else(
+                        || format!("x{}", assumption.column),
+                        |variable| variable.name.clone(),
+                    );
                 format!(
-                    "x{} {} {}",
-                    assumption.column,
+                    "{named} {} {}",
                     if assumption.at_most { "≤" } else { "≥" },
                     assumption.value.to_canonical_string()
                 )

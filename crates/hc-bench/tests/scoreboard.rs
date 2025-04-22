@@ -15,11 +15,28 @@ use std::path::PathBuf;
 
 use hc_bench::figure;
 use hc_bench::scoreboard::{COUNTERS_BEGIN, COUNTERS_END, counters, render};
+use hc_receipt as receipt;
 
 fn repository() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
+}
+
+/// A count spelled the way the prose spells it.
+fn grouped(value: usize) -> String {
+    let digits = value.to_string();
+    let mut out = String::new();
+    for (at, digit) in digits.chars().enumerate() {
+        if at > 0 && {
+            let __multiple_value = digits.len() - at;
+            __multiple_value % 3 == 0
+        } {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
 }
 
 fn committed() -> String {
@@ -117,4 +134,30 @@ fn the_committed_figure_is_the_tree_the_solver_produces_now() {
     // And it is a picture of something that verified.
     assert!(fresh.contains("claim optimal"));
     assert!(fresh.contains("by hc-verify, which links none of the solver"));
+}
+
+#[test]
+fn the_write_up_states_the_line_count_the_receipt_measures() {
+    // The counter block exists because a number nobody regenerates is a number
+    // that was true once, and its own documentation names "the line count that
+    // was true a year ago" as the example of the failure. The first write-up
+    // states that same measurement in prose, where the generator does not
+    // reach, and it had drifted sixteen lines behind the receipt before this
+    // test existed. The board is diffed; so is this.
+    let measured = receipt::of(&repository().join("crates").join("hc-verify"));
+    let path = repository()
+        .join("docs")
+        .join("writeups")
+        .join("01-shows-its-work.md");
+    let essay = fs::read_to_string(&path).expect("the first write-up");
+    let stated = format!(
+        "{} lines across {} files",
+        grouped(measured.lines),
+        measured.files.len()
+    );
+    assert!(
+        essay.contains(&stated),
+        "docs/writeups/01-shows-its-work.md does not say \"{stated}\", which is what the \
+         verifier measures now"
+    );
 }

@@ -85,6 +85,25 @@ fn every_case_file_is_complete_and_says_what_it_is_about() {
                 "{name} has no {heading} section"
             );
         }
+        // `fixed-in` names the release the fix landed in. Every commit here is
+        // a release and a case file lands in the same one as its fix, so there
+        // is no state in which the honest answer is a word rather than a
+        // version. The field was checked for being present and not for saying
+        // anything, and an entry that said `unreleased` went on saying it for
+        // five of them, on a page that publishes the field to visitors.
+        let fixed = field(text, "fixed-in").expect("a fixed-in field");
+        let released = fixed.strip_prefix('v').is_some_and(|rest| {
+            let parts: Vec<&str> = rest.split('.').collect();
+            parts.len() == 3
+                && parts
+                    .iter()
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        });
+        assert!(
+            released,
+            "{name} states fixed-in {fixed}, which is not a vX.Y.Z release"
+        );
+
         // The catalogue is not padded, and nothing in it is a placeholder.
         for marker in ["TODO", "TBD", "FIXME", "placeholder"] {
             assert!(

@@ -3,7 +3,7 @@ id: HC-CASE-0006
 crate: hc-cli
 found-by: the situation room's build step, which replays the recording it ships through the module the page loads
 reproduce: cargo test -p hc-cli solving_and_explaining_are_the_same_run
-fixed-in: unreleased
+fixed-in: v0.12.3
 rejection: none
 ---
 

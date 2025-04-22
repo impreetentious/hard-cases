@@ -21,7 +21,7 @@ Three properties, and dropping any one of them turns the exercise into
 theatre.
 
 **It has to be checkable by something that did not produce it.** `hc-verify`
-is 8,439 lines across 23 files with **zero dependencies** — not zero external
+is 8,423 lines across 23 files with **zero dependencies** — not zero external
 crates, zero: its own arbitrary-precision integers, its own rationals, its own
 SHA-256, its own parsers for all three input formats, its own model, its own
 rule engine. `cargo tree -p hc-verify` is one line. A gate fails the build if
