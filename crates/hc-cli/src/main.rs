@@ -31,7 +31,7 @@ fn main() -> ExitCode {
                 eprintln!("hc: {root} does not look like a crate directory");
                 return code(Ending::Misused);
             }
-            print!("{}", hc_bench::receipt::of(&directory).render());
+            print!("{}", hc_receipt::of(&directory).render());
             code(Ending::Fine)
         }
         Command::Explain {

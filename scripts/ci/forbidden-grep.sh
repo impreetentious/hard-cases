@@ -23,7 +23,7 @@ cd "$root_dir"
 
 # Crates outside the deterministic solver perimeter: they may read clocks,
 # touch the filesystem, and report in floating point.
-HOST_CRATES=(hc-cli hc-bench hc-wasm hc-fuzz)
+HOST_CRATES=(hc-cli hc-bench hc-wasm hc-fuzz hc-receipt)
 
 solver_paths=()
 for crate_dir in crates/*/; do
@@ -255,6 +255,31 @@ if [[ -d crates/hc-tamper ]]; then
     echo "forbidden: the forger depends on the verifier; it must not be able to ask whether its forgeries pass"
     status=1
   fi
+fi
+
+# The harness is a leaf, and the shipped binary is the reason.
+#
+# `hc-bench` holds the reference solver — the oracle the production search is
+# checked against — and it takes the tamper corpus to run the forgeries. A crate
+# that depends on it inherits both, and ADR-0019 decided that the `hc` binary
+# must contain "nothing that exists to disagree with" the solver, so that a
+# reader auditing the trust story does not have to work out why the oracle is
+# sitting inside the program it is an oracle for.
+#
+# That edge existed anyway for seven versions, because the trust-boundary
+# receipt lived inside the harness and the command line wanted it. The receipt
+# is its own crate now. This refuses the edge rather than trusting it to stay
+# gone, which is what the record on its own turned out to be worth.
+if [[ -d crates/hc-bench ]]; then
+  for manifest in crates/*/Cargo.toml; do
+    crate_name="$(basename "$(dirname "$manifest")")"
+    [[ "$crate_name" == "hc-bench" ]] && continue
+    if grep -qE '^[[:space:]]*hc-bench[[:space:]]*=' "$manifest"; then
+      echo "forbidden: $crate_name depends on the benchmark harness"
+      echo "  it holds the reference solver and the tamper corpus; see ADR-0019"
+      status=1
+    fi
+  done
 fi
 
 if [[ $status -ne 0 ]]; then

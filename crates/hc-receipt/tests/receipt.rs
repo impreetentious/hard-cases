@@ -8,8 +8,8 @@
 
 use std::path::PathBuf;
 
-use hc_bench::receipt::of;
 use hc_core::SpecDocument;
+use hc_receipt::of;
 
 const CAPS: &str = include_str!("../../../spec/v1/numeric.toml");
 

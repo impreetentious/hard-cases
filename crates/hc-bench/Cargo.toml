@@ -22,6 +22,10 @@ hc-tamper = { path = "../hc-tamper" }
 hc-cuts = { path = "../hc-cuts" }
 hc-mip = { path = "../hc-mip" }
 hc-presolve = { path = "../hc-presolve" }
+# The trust-boundary receipt, whose figures the front page's counters carry.
+# Its own crate so that the command line can offer `hc receipt` without taking
+# this harness — and the reference solver in it — along; see ADR-0019.
+hc-receipt = { path = "../hc-receipt" }
 
 # The proof campaign hands every certificate it assembles to the standalone
 # verifier, which is a caller using a public interface. The edge runs one way

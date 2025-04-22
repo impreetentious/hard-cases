@@ -20,7 +20,8 @@ pub mod exhaustive;
 pub mod figure;
 pub mod miplib;
 pub mod proof;
-pub mod receipt;
 pub mod ref_lp;
 pub mod scoreboard;
 pub mod tiny;
+
+pub mod receipt;

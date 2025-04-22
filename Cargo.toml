@@ -13,13 +13,14 @@ members = [
     "crates/hc-lp",
     "crates/hc-mip",
     "crates/hc-presolve",
+    "crates/hc-receipt",
     "crates/hc-tamper",
     "crates/hc-verify",
     "crates/hc-wasm",
 ]
 
 [workspace.package]
-version = "0.13.1"
+version = "0.13.2"
 authors = ["Sidakpreet Singh"]
 edition = "2024"
 license = "Apache-2.0"

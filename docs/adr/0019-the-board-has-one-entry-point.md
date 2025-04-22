@@ -47,6 +47,21 @@ a `--against-reference` flag on `solve`, say — this record is what it has to
 argue with, and the argument would be about that feature rather than about
 tidiness.
 
+**What an audit of this record found.** The edge described above as planned was
+already built. `hc-cli` had declared `hc-bench` since v0.5.4 and called
+`hc_bench::receipt::of` since v0.5.5 — seven versions before this record was
+written — so `cargo tree -p hc-cli` carried the reference solver and, through
+it, the tamper corpus, and the paragraph about what the `hc` binary contains
+was not true of the built artifact on the day it was typed.
+
+The cause was the sentence above about the receipt. It measures the verifier
+and needs none of the harness, and it was living inside the harness anyway,
+which is what the command line had to take to reach it. It is `hc-receipt`
+now — its own crate, over the hash and nothing else — and `hc-cli` depends on
+that instead. The forbidden-API scan refuses any crate that declares
+`hc-bench`, so the edge is now closed by a gate rather than by this record,
+which on its own turned out not to be enough.
+
 ## Alternatives considered
 
 **Build the wrapper as planned.** Rejected for the two reasons above: it puts

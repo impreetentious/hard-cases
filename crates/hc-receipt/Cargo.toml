@@ -1,0 +1,15 @@
+[package]
+name = "hc-receipt"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# The hash and nothing else. The receipt counts lines and digests bytes; it
+# does not read a model, solve one, or check a proof.
+hc-core = { path = "../hc-core" }
+
+[lints]
+workspace = true

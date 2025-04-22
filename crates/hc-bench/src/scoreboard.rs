@@ -122,7 +122,7 @@ pub const COUNTERS_END: &str = "<!-- counters:end -->";
 /// page that is read months later.
 #[must_use]
 pub fn counters(verifier_root: &std::path::Path) -> String {
-    let receipt = crate::receipt::of(verifier_root);
+    let receipt = hc_receipt::of(verifier_root);
     let mut out = String::from(COUNTERS_BEGIN);
     out.push('\n');
     out.push_str("| measured | |\n|---|---:|\n");
