@@ -8,6 +8,36 @@
 // The fragment rather than the query string, because this page is served as a
 // static file and the fragment is the half a static host never sees.
 
+/**
+ * The panels the address may name.
+ *
+ * The address is a contract with every link anybody has already copied, so a
+ * `p=` this version does not have is a link from a different one rather than a
+ * panel to go looking for. Reading it as the start panel keeps the tab strip
+ * and the stage saying the same thing: the render ladder ends in the case
+ * files, so an unrecognised name used to land there with no tab selected and
+ * with the stage's `aria-labelledby` naming a tab that is not on the page.
+ *
+ * This is the list, and `App` takes its tab strip from it, so a panel cannot
+ * be added to one and forgotten in the other.
+ */
+export const PANELS = [
+  "tree",
+  "convergence",
+  "frontier",
+  "glass",
+  "certificate",
+  "tamper",
+  "cases",
+] as const;
+
+/** One of the panels the address may name. */
+export type Panel = (typeof PANELS)[number];
+
+function isPanel(value: string): value is Panel {
+  return (PANELS as readonly string[]).includes(value);
+}
+
 /** Everything the address carries. */
 export interface Where {
   /** The instance file the picker is on. */
@@ -15,7 +45,7 @@ export interface Where {
   /** The node budget the last solve was run under. */
   nodes: number;
   /** Which panel is showing. */
-  panel: string;
+  panel: Panel;
   /** How far along the trace the scrubber is, or -1 for the end. */
   event: number;
   /** Which certificate record the viewer has selected, or -1 for none. */
@@ -58,10 +88,11 @@ export function read(fragment: string): Where {
     const value = Number.parseInt(raw, 10);
     return Number.isFinite(value) ? value : fallback;
   };
+  const panel = parts.get(KEYS.panel);
   return {
     instance: parts.get(KEYS.instance) ?? START.instance,
     nodes: Math.max(1, Math.min(CEILING, whole(KEYS.nodes, START.nodes))),
-    panel: parts.get(KEYS.panel) ?? START.panel,
+    panel: panel !== null && isPanel(panel) ? panel : START.panel,
     event: whole(KEYS.event, START.event),
     record: whole(KEYS.record, START.record),
   };

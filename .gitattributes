@@ -15,7 +15,20 @@
 *.lp -text
 *.hcc -text
 *.hct -text
-spec/v1/vectors/json/*.json -text
+*.canon -text
+
+# Every hand-worked vector, at every depth, for the same reason and one more:
+# a carriage return is a different instance here rather than a stray byte to
+# tidy up, so the readers refuse one instead of normalizing it (ADR-0006). A
+# fixture that git had quietly stripped a carriage return out of on the way
+# into the index would be a fixture testing the opposite of what it says.
+#
+# The tree rather than a list of extensions, because a pattern carrying a
+# slash does not reach into a subdirectory: `spec/v1/vectors/json/*.json`
+# covered the vectors beside it and left every rejection fixture under
+# `reject/` on the default policy. The frozen `.canon` dumps are compared with
+# `assert_eq!` against `include_str!`, and they were on it too.
+spec/v1/vectors/** -text
 
 # Binary — never convert
 *.gif binary

@@ -226,3 +226,15 @@ test("the address carries the whole view", async ({ page }) => {
   await page.locator('[data-role="scrub"]').fill("2");
   await expect(page).toHaveURL(/e=2/);
 });
+
+test("a panel name this page does not have opens on the panel it starts on", async ({ page }) => {
+  // The address is a contract with every link that has already been copied. A
+  // `p=` naming a panel this version does not have is a link from a version
+  // that did, rather than a panel to go looking for — and the render ladder
+  // ends in the case files, so an unrecognised name used to land there with no
+  // tab selected and with the stage labelled by a tab that is not on the page.
+  await open(page, "#p=situation-report");
+  await expect(page.locator('[data-panel="tree"]')).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator('[data-panel="cases"]')).toHaveAttribute("aria-selected", "false");
+  await expect(page.locator("#stage")).toHaveAttribute("aria-labelledby", "tab-tree");
+});

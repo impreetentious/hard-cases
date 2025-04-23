@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 #
-# The local mirror of CI. Run this before opening a change; it is the same set
-# of checks the `check` workflow runs, in the same order, so a red pipeline is
-# something you already saw on your own machine.
+# The local mirror of CI. Run this before opening a change; it is the `check`
+# workflow's always-on steps, in the same order, so a red pipeline is something
+# you already saw on your own machine.
+#
+# It is not the whole workflow, and the difference is named here rather than
+# discovered. Continuous integration also runs the workspace tests unoptimized,
+# the certification, tiny integer, and dual simplex campaigns at their nightly
+# sizes, the fuzzer at its nightly budget, and `cargo doc`. Those are sized for
+# a machine with nothing else to do, and a mirror nobody can bear to look in is
+# not a mirror. `docs/contributing.md` carries the same list.
 
 set -euo pipefail
 

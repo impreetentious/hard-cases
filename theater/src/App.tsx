@@ -100,15 +100,25 @@ interface Recording {
   version: string;
 }
 
-const PANELS: { id: string; title: string }[] = [
-  { id: "tree", title: "Tree" },
-  { id: "convergence", title: "Convergence" },
-  { id: "frontier", title: "Frontier" },
-  { id: "glass", title: "Glass" },
-  { id: "certificate", title: "Certificate" },
-  { id: "tamper", title: "Tamper lab" },
-  { id: "cases", title: "Case files" },
-];
+/**
+ * What each panel is called on its tab.
+ *
+ * The ids come from `share`, which is where the address's vocabulary lives, so
+ * the tab strip and the set of names a link may carry cannot drift apart. The
+ * record is total over that union: a panel added there without a title here
+ * fails the type check rather than shipping a tab with no label on it.
+ */
+const TITLES: Record<share.Panel, string> = {
+  tree: "Tree",
+  convergence: "Convergence",
+  frontier: "Frontier",
+  glass: "Glass",
+  certificate: "Certificate",
+  tamper: "Tamper lab",
+  cases: "Case files",
+};
+
+const PANELS = share.PANELS.map((id) => ({ id, title: TITLES[id] }));
 
 /** Fetches a file the page ships beside itself. */
 async function fetchBytes(path: string): Promise<Uint8Array> {

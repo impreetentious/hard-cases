@@ -27,9 +27,16 @@ echo
 "$root_dir/target/debug/hc" --version | sed 's/^/  /'
 if revision="$(git rev-parse HEAD 2>/dev/null)"; then
   echo "  revision  $revision"
-  if ! git diff --quiet HEAD 2>/dev/null; then
-    # A receipt taken over a dirty tree names source that is not in any commit.
-    # Saying so is the difference between a receipt and a decoration.
+  # A receipt taken over a dirty tree names source that is not in any commit.
+  # Saying so is the difference between a receipt and a decoration.
+  #
+  # The whole status rather than a diff against HEAD: `hc receipt` measures the
+  # crate directory as it finds it, so a new file that has never been added is
+  # counted in the file total and hashed into the source digest, and it is
+  # exactly the file a diff cannot see. A receipt that called the tree clean
+  # while its own digest covered an untracked module would be the decoration
+  # this line exists to refuse.
+  if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
     echo "  revision  (working tree has uncommitted changes)"
   fi
 fi
