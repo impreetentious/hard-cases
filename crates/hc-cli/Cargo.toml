@@ -21,7 +21,7 @@ hc-presolve = { path = "../hc-presolve" }
 # `hc receipt` measures the trust boundary. It takes this rather than the
 # benchmark harness the measurement used to live in, because the harness holds
 # the reference solver and linking an oracle into the program it is an oracle
-# for is the arrangement ADR-0019 refused.
+# for is the arrangement the decision log refused.
 hc-receipt = { path = "../hc-receipt" }
 hc-verify = { path = "../hc-verify" }
 

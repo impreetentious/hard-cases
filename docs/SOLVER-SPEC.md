@@ -1,13 +1,44 @@
-# Limitations
+# Hard Cases — Solver Specification
 
-What this project does not do, cannot do, and does not yet do — stated plainly,
-because a claim about correctness is worth exactly as much as the boundary
-drawn around it.
+The single normative document for this repository. It states what the project
+does, where it stops, and every decision that produced those two answers.
 
-This file is part of the release, not a footnote to it. It is updated in the
-same change as whatever moves a line in it.
+Read §1 before interpreting a report, a benchmark, or a green test.
 
-## The trust boundary
+## 1. Status and how to read this
+
+This project is at a verified stopping point, not a finished state. What
+follows is true of the tree today; it is not a promise about a later tree.
+
+The middle sections state what is proved and where it stops. The decision log
+carries a **disposition**, which is the only part written for a reviewer rather
+than a user:
+
+| Disposition | Meaning |
+|---|---|
+| **Open** | A different answer is available and costs only engineering. No claim of this project is touched. Reopen freely. |
+| **Load-bearing** | A different answer is available in code, but taking it deletes a claim this project makes. Owner decision only. Do not propose reversing one as an improvement. |
+| **Bound** | Not a decision. Resolving it needs capability that does not exist in this repository. |
+| **Settled** | The decision already went the permissive way. Nothing to reopen; the row exists so it is not re-litigated. |
+
+Dispositions in §20 were assigned from the decision records themselves, not
+from a fresh audit of the tree. Checking them against the code is the first
+task of any review of this document.
+
+## 2. The central claim
+
+Hard Cases is a from-scratch linear and mixed-integer optimizer. The solver is
+the excuse; the certificate it emits with every claim, and the independent
+verifier that reads the original bytes and rechecks the proof, are the point.
+
+A claim without a certificate that an independent verifier accepts is not a
+result this project reports.
+
+Where this document says something is refused, unchecked, or absent, that is
+the claim working rather than a gap in it. A proposal that removes a refusal is
+not thereby an improvement.
+
+## 3. The trust boundary
 
 **What the verifier's acceptance means.** `hc-verify` decides whether a
 certificate is a valid proof under the published calculus. It does not decide
@@ -31,7 +62,7 @@ implementation fails twice, which is the entire benefit being claimed, and it is
 less than the benefit of two authors. It is also not formal verification: no
 part of this is machine-checked against a specification.
 
-## Where floating point stops
+## 4. Where floating point stops
 
 The search runs in binary64 and nothing it computes is ever a conclusion. Every
 bound in a certificate is an exact rational inference over the original model's
@@ -45,7 +76,7 @@ nearest to it. A model whose exact values do not survive a round-trip into
 binary64 is rejected rather than solved, because the search would otherwise be
 working on a different model than the proof is about.
 
-## What the verifier checks today
+## 5. What the verifier checks today
 
 Certificates for linear programs: an optimal claim, an infeasibility, an
 original-space unbounded ray, a certified gap between an exact bound and an
@@ -72,7 +103,7 @@ transforms, the hash each record states is compared against what that
 recomputation produces, and the original-space witness is checked against the
 original model and then mapped forward through the chain onto the reduced one.
 
-## What the verifier does not check yet
+## 6. What the verifier does not check yet
 
 Nothing, at present. Every record kind the format defines now has a rule that
 closes it, cut derivations included: a Gomory or cover record is recomputed from
@@ -82,12 +113,12 @@ reproduce is refused.
 The arrangement that made this section necessary has not gone away. A record
 kind this implementation cannot close is **refused**, with a message saying so,
 rather than skipped — see
-[ADR-0010](adr/0010-a-verifier-refuses-what-it-cannot-check.md) for why a
+[decision 0010](#20-decision-log) for why a
 refusal is the honest response and a skip is not. The section stays because the
 format is expected to grow again, and a rule that lands without its hand-worked
 vectors lands here first.
 
-## What the committed corpora establish, and what is absent
+## 7. What the committed corpora establish, and what is absent
 
 Twelve instance files are committed and gates consume all of them. Eight are
 linear and are solved twice, once by the revised simplex and once by a dense
@@ -111,7 +142,7 @@ covering only what is committed and calling that the board. Until they are
 fetched and run, every claim this project makes about how it behaves on
 instances it did not generate rests on twelve hand-written models.
 
-## What the campaigns establish
+## 8. What the campaigns establish
 
 Two campaigns run on every change at a per-change size. The `check` workflow
 runs them again at a larger size, along with the dual simplex campaign and the
@@ -128,7 +159,7 @@ campaigns publish what they saw — how many of each claim, and how often
 assembly declined — so that a run which quietly stopped certifying would be
 visible rather than clean.
 
-## What the tamper corpus establishes
+## 9. What the tamper corpus establishes
 
 `tamper/manifest.toml` names a set of mutations of genuine certificates, each
 paired with the exact rejection identifier that must answer it, and a gate runs
@@ -137,7 +168,7 @@ establishes that those mutations are caught, by the rule that should catch them.
 It does not establish that no other mutation exists — no finite corpus can — and
 an incident that turns one up becomes an entry rather than a footnote.
 
-## What the solver does not do
+## 10. What the solver does not do
 
 - No quadratic, conic, or nonlinear anything. No special ordered sets, indicator
   constraints, or semicontinuous variables. No callbacks, no lazy constraints,
@@ -153,7 +184,7 @@ an incident that turns one up becomes an entry rather than a footnote.
   no progress. Solving the same model with presolve off produces the claim.
 - No modelling language. Files in, results out.
 
-## What the input readers accept
+## 11. What the input readers accept
 
 Fixed-form and free-form MPS, with the bound types `LO UP FX FR MI PL BV LI UI`
 and no others. Three readings that the format leaves genuinely ambiguous are
@@ -199,7 +230,7 @@ model is refused rather than approximated, and the JSON schema — which quotes
 names and carries every value as text — is the one that can usually still take
 it.
 
-## What the browser surface is
+## 12. What the browser surface is
 
 One WebAssembly module. Three entry points produce results — a bounded live
 solve, a replay of a recorded trace and certificate, and the verifier alone
@@ -254,7 +285,7 @@ being the only place it appears. Everything the unsafe blocks do is turn a
 pointer and a length the caller received from this module back into the slice
 it came from.
 
-## What a trace is, and is not
+## 13. What a trace is, and is not
 
 A trace is what the search did. It is not a proof and it never becomes one: a
 reader learns which nodes were opened and in what order, which cuts entered the
@@ -282,7 +313,7 @@ an integral leaf carries the objective its point attains, and a branch carries
 the integer the split was taken at. Those are rationals, they are the numbers
 the certificate cites for the same nodes, and none of them is recomputed here.
 
-## What the determinism gate compares
+## 14. What the determinism gate compares
 
 Every artifact is produced twice, in two separate processes, and compared byte
 for byte: the canonical dump, the certificate, the solve report, the
@@ -296,7 +327,7 @@ fused multiply-add, one thread — and is not yet measured by a job that runs th
 same instance on two of them and compares. Until that exists, cross-platform
 determinism is a design claim here and not a tested one.
 
-## What the fuzzing establishes, and what it does not
+## 15. What the fuzzing establishes, and what it does not
 
 The fuzz corpus is generated from seeds rather than grown from coverage
 feedback, so every case is a function of its seed and reproduces anywhere by
@@ -309,9 +340,9 @@ is answered with a verdict or an identifier rather than a crash.
 **There is no coverage feedback.** The corpus reaches what its generators were
 written to reach. A region of a reader that nobody thought to emit for is a
 region nobody is fuzzing, and no counter here will report that. The decision and
-what it buys are recorded in ADR-0017.
+what it buys are recorded in [decision 0017](#20-decision-log).
 
-## What the receipt publishes
+## 16. What the receipt publishes
 
 `./scripts/receipt.sh` measures the trusted base at the moment it runs: the
 files, the counted lines, the hash of that exact source, the declared
@@ -320,26 +351,74 @@ certificate and reports what that cost. Nothing in it is transcribed from a
 previous run, and a receipt taken over a working tree with uncommitted changes
 says so, because otherwise it would name source that is in no commit.
 
-## What a work figure means
+## 17. What a work figure means
 
 The verifier reports its cost in work units: one per byte parsed and one per
 limb-word step of arithmetic. The figure is an **upper bound** rather than an
 exact tally — a reduction to lowest terms takes a number of steps that depends
 on its inputs, and it is charged its widest case. See
-[ADR-0011](adr/0011-verifier-work-is-an-upper-bound-charged-at-a-metered-facade.md)
+[decision 0011](#20-decision-log)
 for why a ceiling is the safe direction. The figure is deterministic: the same
 certificate and instance produce the same number on every machine.
 
-## Sizes and caps
+## 18. Sizes and caps
 
 A certificate that exceeds a published size, bit, or work cap does not receive a
 proof-bearing status. The observed value and the limit are both reported. Caps
 are absolute and are never expressed as a ratio against how long the solve took.
 
-## On speed
+## 19. On speed
 
 There are no wall-clock comparisons against other solvers anywhere in this
 project, and there will not be any. Work is budgeted in deterministic counts —
 simplex iterations, nodes, cut rounds on the solver's side; bytes and limb
 operations on the verifier's. Wall time and peak memory are disclosed as
 operational measurements and gate nothing.
+
+## 20. Decision log
+
+Every recorded decision, the alternative it rejected, and whether a
+different answer is available. Superseded rows are kept: a decision that
+was reversed is still a decision somebody has to not make again.
+
+| # | Decision | Rejected alternative | Disposition |
+|---|---|---|---|
+| 0001 | Foundation decisions | A third-party big-integer crate, a shared parser between solver and verifier, trusting basis information stated in the certificate, floating-point gap reporting, wall-clock effort budgets, and a… | **Load-bearing** |
+| 0002 | Decisions made in freezing the v1 formats | JSON or a bespoke line format for the assets, both rejected because TOML tables already express what is needed and a bespoke format would need its own specification. YAML, rejected because its… | **Open** |
+| 0003 | Correcting a miscomputed rational comparison vector | Leave the vector and make the implementations match it. Rejected without hesitation. A false claim in the corpus that both sides satisfy is the exact failure the two-implementation design exists to… | **Settled** |
+| 0004 | What the verifier isolation check refuses, precisely | Put the verifier's tests inside the library as unit tests, where no import is needed. Rejected: unit tests can reach private internals, and a harness that checks the verifier through its private… | **Load-bearing** |
+| 0005 | The exact arithmetic sits beneath the shared vocabulary | Put the canonical model in the parser crate, which depends on both. Rejected: the linear-algebra and search crates need the model and do not need the parser, so the model would have dragged… | **Open** |
+| 0006 | Accepted instance input is ASCII with line-feed endings | Accept UTF-8 and let names carry any character. Rejected: the dump is ASCII, so either the dump would have to change — a real contract version bump, with every fixture regenerated — or names would… | **Open** |
+| 0007 | Basis updates are kept in product form for now | Implement Forrest–Tomlin now. Rejected on sequencing rather than on merit. There is no simplex yet to measure, so the implementation would be tuned against an imagined workload, and the risk sits in… | **Open** |
+| 0008 | The certificate's byte-level framing | A self-describing container. Rejected without much thought: a format with a schema in it is a format with two things to get wrong, and the record list is closed precisely so that nothing has to be… | **Load-bearing** |
+| 0009 | A model's hash is the digest of its canonical dump | Hash an implementation's model structure directly. Rejected outright. The two implementations do not share a model type, so this would require specifying a serialization anyway — which is the… | **Load-bearing** |
+| 0010 | A verifier refuses record kinds it cannot yet check | Accept unknown records and warn. Rejected on the argument above: the records are not independent, so an unchecked record is not a missing check but a wrong one. Refuse only the kinds that change… | **Load-bearing** |
+| 0011 | Verifier work is an upper bound charged at a metered façade | A global counter. Rejected above: ambient state in the crate that must have none, and it makes concurrent verifications interfere. A meter parameter inside the arithmetic. Rejected above: it damages… | **Open** |
+| 0012 | The verifier's executable is the single exemption from the ambient-input ban | Put `hc-verify` on the host-crate list. Rejected: that removes the ban from the whole crate to permit one file, which is the opposite of paying for an exemption. Ship the verifier as a library only… | **Load-bearing** |
+| 0013 | The exact rebuild belongs to the linear core | Duplicate the elimination in the search. Rejected. Two implementations that must agree, in the one place where disagreement is worst, with no vectors holding them together — this project has a name… | **Load-bearing** |
+| 0014 | A reduced model is not the file it came from | Renumber the notes alongside everything else. Rejected: it makes the notes mean something new — a position in a model nobody wrote — and it adds a second renumbering rule that both implementations… | **Load-bearing** |
+| 0015 | A cut's displacements are measured from the model, not from a basis | Add the bound state to the record. Rejected: a format version bump, migration fixtures, and a new field whose only purpose is to let the certificate assert something the verifier can derive. A proof… | **Load-bearing** |
+| 0016 | The remaining two input formats are frozen before their parsers | Write one parser and let the asset describe it. This is what the format documentation would have been if it were maintained by hand, and it fails the same way: the description drifts toward whatever… | **Load-bearing** |
+| 0017 | The fuzzer is deterministic and lives in the tree | `cargo-fuzz` alongside this, for the coverage it would add. Rejected for v1 rather than forever: it would need a second toolchain in the pinned environment and a second corpus format for case files,… | **Open** |
+| 0018 | Bound tightening gets a budget | A total step cap on the chain. Simpler, and wrong in the shape it fails: a cap large enough for a ten-thousand-column model does not stop a cycle in a four-column one, and a cap small enough to stop… | **Open** |
+| 0019 | The board has one entry point, and it is not the command line | Build the wrapper as planned. Rejected for the two reasons above: it puts the oracle in the audited binary and buys nothing. Move the reference solver out of `hc-bench` so the edge is harmless. That… | **Open** |
+| 0020 | A published identifier that nothing can produce is retired, not left | Implement the eight checks. Each would be a second check for a condition an earlier one already refuses, and the table's own policy is that an identifier names the *earliest* point at which a defect… | **Settled** |
+
+## 21. How to review this document
+
+A reviewer is asked to find rows where a different decision is available and
+worth taking. The rules of that review:
+
+1. **Only Open rows are in scope.** Load-bearing rows are the claim in §2;
+   proposing their reversal is proposing a different project. Bound rows are
+   not decisions. Settled rows already went the permissive way.
+2. **Check the dispositions first.** They were read off the decision records,
+   not off the code. A mislabelled row is the most likely defect here.
+3. **Name the failure, not the preference.** Reopen a row only if you can state
+   what concretely goes wrong for a solo owner of a private repository if it
+   stays as it is.
+4. **A refusal is a feature until proven otherwise.** A proposal that reduces
+   the count of things this project declines to do is not thereby an
+   improvement.
+5. **Disposition changes are the owner's call.** If a row looks mislabelled,
+   say so and stop. Do not act on the relabelling.

@@ -46,7 +46,7 @@ done
 # rather than tolerated in general. `explain` is the one command here that
 # legitimately refuses: a search that reaches no conclusion has no certificate
 # to explain, which is what an unbounded relaxation found under presolve does
-# — see docs/LIMITATIONS.md. That refusal used to be swallowed with `|| true`,
+# — see docs/SOLVER-SPEC.md. That refusal used to be swallowed with `|| true`,
 # and swallowing it swallowed every other one with it: a regression that broke
 # `explain` on all six would have left this gate green while it compared two
 # identical error messages and skipped the trace comparison entirely, which is

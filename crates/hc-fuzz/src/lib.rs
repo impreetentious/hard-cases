@@ -24,7 +24,7 @@
 //! build by a distance.
 //!
 //! What is given up is real coverage feedback. This is stated in
-//! `docs/LIMITATIONS.md` rather than papered over: the corpus reaches what its
+//! `docs/SOLVER-SPEC.md` rather than papered over: the corpus reaches what its
 //! generators were written to reach, and a region of a reader that nobody
 //! thought to emit for is a region nobody is fuzzing.
 

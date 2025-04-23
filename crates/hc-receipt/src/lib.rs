@@ -21,7 +21,7 @@
 //! command line offers `hc receipt`, and the scoreboard puts the same figures
 //! on the front page; when this lived inside the benchmark harness, the first
 //! of those made the shipped binary depend on the harness, and so on the
-//! reference solver that exists to disagree with it. ADR-0019 decided that
+//! reference solver that exists to disagree with it. The decision log records that
 //! edge should not exist. It reads the filesystem, so it sits outside the
 //! deterministic perimeter with the other host crates.
 

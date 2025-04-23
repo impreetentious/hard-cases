@@ -78,7 +78,7 @@ verifier accept something it previously rejected, without that, is forbidden.
 
 ## Decisions and formats
 
-Numbered decision records in `docs/adr/` are append-only. If a change crosses a
+The decision log in `docs/SOLVER-SPEC.md` is append-only. If a change crosses a
 crate boundary, touches a file or certificate format, or affects what a claimed
 status means, write the record before the implementation. Formats carry
 versions; changing one bumps the version and regenerates its fixtures.

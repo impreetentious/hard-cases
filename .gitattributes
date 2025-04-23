@@ -19,7 +19,7 @@
 
 # Every hand-worked vector, at every depth, for the same reason and one more:
 # a carriage return is a different instance here rather than a stray byte to
-# tidy up, so the readers refuse one instead of normalizing it (ADR-0006). A
+# tidy up, so the readers refuse one instead of normalizing it; see the decision log. A
 # fixture that git had quietly stripped a carriage return out of on the way
 # into the index would be a fixture testing the opposite of what it says.
 #

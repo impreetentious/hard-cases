@@ -145,11 +145,8 @@ fn the_write_up_states_the_line_count_the_receipt_measures() {
     // reach, and it had drifted sixteen lines behind the receipt before this
     // test existed. The board is diffed; so is this.
     let measured = receipt::of(&repository().join("crates").join("hc-verify"));
-    let path = repository()
-        .join("docs")
-        .join("writeups")
-        .join("01-shows-its-work.md");
-    let essay = fs::read_to_string(&path).expect("the first write-up");
+    let path = repository().join("docs").join("WRITEUPS.md");
+    let essay = fs::read_to_string(&path).expect("the write-ups");
     let stated = format!(
         "{} lines across {} files",
         grouped(measured.lines),
@@ -157,7 +154,7 @@ fn the_write_up_states_the_line_count_the_receipt_measures() {
     );
     assert!(
         essay.contains(&stated),
-        "docs/writeups/01-shows-its-work.md does not say \"{stated}\", which is what the \
+        "docs/WRITEUPS.md does not say \"{stated}\", which is what the \
          verifier measures now"
     );
 }

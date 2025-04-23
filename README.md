@@ -19,7 +19,7 @@ cover of the branch tree — which `hc-verify` then checks by reparsing the
 proof rules. It shares no executable code with the solver, has no dependencies
 at all, and its trust boundary is published rather than described as magic. What
 that boundary does and does not include is spelled out in
-[limitations](docs/LIMITATIONS.md).
+[the solver specification](docs/SOLVER-SPEC.md).
 
 ![The certified proof tree of a small fixed-charge model: five nodes, two of
 them split on a binary column, and each of the three leaves closed by a
@@ -122,7 +122,7 @@ this solver, and work is budgeted in deterministic effort units — simplex
 iterations and node counts — never in seconds. Supported targets are Linux
 x86_64, macOS arm64, and WebAssembly; Windows is not a supported CI target. A
 false terminal claim is a severity-zero defect. See
-[limitations](docs/LIMITATIONS.md) before interpreting any result.
+[the solver specification](docs/SOLVER-SPEC.md) before interpreting any result.
 
 ## Going deeper
 
@@ -135,15 +135,15 @@ stale: `hc receipt` measures it — how much code did the checking, what it
 depends on, the hash of that source, and what one real verification cost in
 units that are not seconds.
 
-- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — what this does and does not
-  prove; read it before interpreting any result
-- [`docs/writeups/`](docs/writeups/) — the six essays:
-  [the solver that shows its work](docs/writeups/01-shows-its-work.md),
-  [big rationals from nothing](docs/writeups/02-big-rationals.md),
-  [degeneracy, the simplex's haunted house](docs/writeups/03-degeneracy.md),
-  [a proof you can tamper with](docs/writeups/04-tamper.md),
-  [the cut that lies](docs/writeups/05-cut-validity.md), and
-  [honest scoreboards](docs/writeups/06-honest-scoreboards.md)
+- [`docs/SOLVER-SPEC.md`](docs/SOLVER-SPEC.md) — what this does and does not
+  prove, and every decision behind both; read it before interpreting any result
+- [`docs/WRITEUPS.md`](docs/WRITEUPS.md) — the six essays:
+  [the solver that shows its work](docs/WRITEUPS.md#1-the-solver-that-shows-its-work),
+  [big rationals from nothing](docs/WRITEUPS.md#2-big-rationals-from-nothing),
+  [degeneracy, the simplex's haunted house](docs/WRITEUPS.md#3-degeneracy-the-simplexs-haunted-house),
+  [a proof you can tamper with](docs/WRITEUPS.md#4-a-proof-you-can-tamper-with),
+  [the cut that lies](docs/WRITEUPS.md#5-the-cut-that-lies), and
+  [honest scoreboards](docs/WRITEUPS.md#6-honest-scoreboards)
 - [`docs/scoreboard.md`](docs/scoreboard.md) — what this solver does on the
   committed corpora, generated and diffed on every run of the suite, with the
   fetched collections named rather than covered up
@@ -151,7 +151,6 @@ units that are not seconds.
   MPS and LP subsets, and the JSON schema, generated from the inert assets
 - [`docs/case-files/`](docs/case-files/) — real bugs, minimized, with the
   instance or the seed that exposed them, and a test that replays each one
-- [`docs/adr/`](docs/adr/) — the numbered decisions, append-only
 - [`spec/`](spec/) — the inert proof calculus: canonicalization, rules,
   rejection identifiers, and hand-worked vectors. Code is never the source of
   truth
@@ -160,8 +159,8 @@ units that are not seconds.
 
 ## Contributing
 
-See [the contribution guide](docs/contributing.md), the numbered decisions in
-[`docs/adr/`](docs/adr/), and the [pull-request
+See [the contribution guide](docs/contributing.md), the decision log in
+[`docs/SOLVER-SPEC.md`](docs/SOLVER-SPEC.md), and the [pull-request
 checklist](.github/PULL_REQUEST_TEMPLATE.md). Every change needs tests and a
 clean local preflight. The verifier acquires no dependency and no shared
 code, ever; changing a proof rule requires a hand-worked derivation and a
@@ -174,4 +173,4 @@ infrastructure, and embedding is the point.
 
 ---
 
-**Version:** v0.13.4
+**Version:** v0.13.5

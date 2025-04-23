@@ -47,7 +47,7 @@ A termination proof that held for seven rules and was assumed for the eighth.
 ## Fix
 
 Each side of each column's bound may now be tightened at most eight times in
-one reduction. ADR-0018 records why a budget rather than a threshold: a
+one reduction. Decision 0018 records why a budget rather than a threshold: a
 smallest-improvement-worth-taking is a tolerance, and a tolerance inside an
 exact reduction would make the reduced model depend on a number nobody derived.
 Counting is honest instead — presolve is an optimization, and a reduction it

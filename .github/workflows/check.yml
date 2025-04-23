@@ -50,7 +50,7 @@ jobs:
       # rather than against a development server.
       - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: theater/package-lock.json
       - run: cargo build --release -p hc-cli

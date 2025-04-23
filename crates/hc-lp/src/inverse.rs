@@ -13,7 +13,7 @@
 //! calculated to build one. The alternative — rewriting the upper factor and
 //! storing a row transformation instead — keeps the update file sparser on
 //! long runs, and it is recorded as a deliberate deferral rather than an
-//! oversight in ADR-0007.
+//! oversight in the decision log.
 //!
 //! Everything here is floating point and everything here drifts. That is why
 //! the drift is measured against the original columns rather than against the

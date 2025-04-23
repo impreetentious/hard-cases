@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "hc-bench"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-cert",
  "hc-core",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "hc-cert"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
  "hc-cuts",
@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "hc-cli"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-cert",
  "hc-core",
@@ -50,14 +50,14 @@ dependencies = [
 
 [[package]]
 name = "hc-core"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-exact",
 ]
 
 [[package]]
 name = "hc-cuts"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -67,14 +67,14 @@ dependencies = [
 
 [[package]]
 name = "hc-exact"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
 ]
 
 [[package]]
 name = "hc-fuzz"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-cert",
  "hc-core",
@@ -88,7 +88,7 @@ dependencies = [
 
 [[package]]
 name = "hc-heur"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "hc-io"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -107,7 +107,7 @@ dependencies = [
 
 [[package]]
 name = "hc-lp"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "hc-mip"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
  "hc-cuts",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "hc-presolve"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
  "hc-exact",
@@ -138,14 +138,14 @@ dependencies = [
 
 [[package]]
 name = "hc-receipt"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-core",
 ]
 
 [[package]]
 name = "hc-tamper"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-cert",
  "hc-core",
@@ -154,11 +154,11 @@ dependencies = [
 
 [[package]]
 name = "hc-verify"
-version = "0.13.4"
+version = "0.13.5"
 
 [[package]]
 name = "hc-wasm"
-version = "0.13.4"
+version = "0.13.5"
 dependencies = [
  "hc-cert",
  "hc-core",

@@ -9,7 +9,7 @@ publish = false
 # The exact arithmetic sits beneath the shared vocabulary rather than above it.
 # The canonical model is made of exact rationals, so the crate that defines the
 # model has to be able to name one; arithmetic, for its part, has no reason to
-# know that instances exist. ADR-0005 records the reversal and why.
+# know that instances exist. The decision log records the reversal and why.
 [dependencies]
 hc-exact = { path = "../hc-exact" }
 

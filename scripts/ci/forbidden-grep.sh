@@ -261,7 +261,7 @@ fi
 #
 # `hc-bench` holds the reference solver — the oracle the production search is
 # checked against — and it takes the tamper corpus to run the forgeries. A crate
-# that depends on it inherits both, and ADR-0019 decided that the `hc` binary
+# that depends on it inherits both, and the decision log records that the `hc` binary
 # must contain "nothing that exists to disagree with" the solver, so that a
 # reader auditing the trust story does not have to work out why the oracle is
 # sitting inside the program it is an oracle for.
@@ -276,7 +276,7 @@ if [[ -d crates/hc-bench ]]; then
     [[ "$crate_name" == "hc-bench" ]] && continue
     if grep -qE '^[[:space:]]*hc-bench[[:space:]]*=' "$manifest"; then
       echo "forbidden: $crate_name depends on the benchmark harness"
-      echo "  it holds the reference solver and the tamper corpus; see ADR-0019"
+      echo "  it holds the reference solver and the tamper corpus; see the decision log"
       status=1
     fi
   done

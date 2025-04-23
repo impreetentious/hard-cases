@@ -23,5 +23,3 @@ pub mod proof;
 pub mod ref_lp;
 pub mod scoreboard;
 pub mod tiny;
-
-pub mod receipt;

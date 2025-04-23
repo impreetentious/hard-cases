@@ -65,5 +65,6 @@ echo "[11/12] browser surface"
 # is the only step that needs a browser on the machine, and a failure here is
 # about the page rather than about the solver.
 echo "[12/12] situation room"
+cargo build --release -p hc-cli
 "$repo_root/scripts/ci/theater.sh"
 echo "preflight: PASS"
