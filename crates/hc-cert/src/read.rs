@@ -126,13 +126,13 @@ pub fn decode(bytes: &[u8]) -> Result<Certificate, Refusal> {
         }
         let code = cursor.byte()?;
         let id = cursor.leb128()?;
-        if let Some(before) = previous {
-            if id <= before {
-                return Err(Refusal::new(
-                    Rejection::HCC_IDENTIFIER_ORDER,
-                    format!("identifier {id} does not follow {before}"),
-                ));
-            }
+        if let Some(before) = previous
+            && id <= before
+        {
+            return Err(Refusal::new(
+                Rejection::HCC_IDENTIFIER_ORDER,
+                format!("identifier {id} does not follow {before}"),
+            ));
         }
         previous = Some(id);
 
@@ -363,13 +363,13 @@ impl<'a> Cursor<'a> {
         let mut out: Vec<(u64, Rational)> = Vec::with_capacity(count as usize);
         for _ in 0..count {
             let id = self.leb128()?;
-            if let Some((previous, _)) = out.last() {
-                if id <= *previous {
-                    return Err(Refusal::new(
-                        Rejection::HCC_SET_ORDER,
-                        format!("element {id} does not follow {previous}"),
-                    ));
-                }
+            if let Some((previous, _)) = out.last()
+                && id <= *previous
+            {
+                return Err(Refusal::new(
+                    Rejection::HCC_SET_ORDER,
+                    format!("element {id} does not follow {previous}"),
+                ));
             }
             out.push((id, self.rational()?));
         }
@@ -413,13 +413,13 @@ impl<'a> Cursor<'a> {
         let mut out: Vec<u64> = Vec::with_capacity(count as usize);
         for _ in 0..count {
             let id = self.leb128()?;
-            if let Some(previous) = out.last() {
-                if id <= *previous {
-                    return Err(Refusal::new(
-                        Rejection::HCC_SET_ORDER,
-                        format!("element {id} does not follow {previous}"),
-                    ));
-                }
+            if let Some(previous) = out.last()
+                && id <= *previous
+            {
+                return Err(Refusal::new(
+                    Rejection::HCC_SET_ORDER,
+                    format!("element {id} does not follow {previous}"),
+                ));
             }
             out.push(id);
         }
@@ -550,13 +550,13 @@ fn read_record(code: u8, cursor: &mut Cursor<'_>) -> Result<Record, Refusal> {
             let mut counts: Vec<(u8, u64)> = Vec::with_capacity(count as usize);
             for _ in 0..count {
                 let code = cursor.byte()?;
-                if let Some((previous, _)) = counts.last() {
-                    if code <= *previous {
-                        return Err(Refusal::new(
-                            Rejection::HCC_SET_ORDER,
-                            format!("record kind {code} does not follow {previous}"),
-                        ));
-                    }
+                if let Some((previous, _)) = counts.last()
+                    && code <= *previous
+                {
+                    return Err(Refusal::new(
+                        Rejection::HCC_SET_ORDER,
+                        format!("record kind {code} does not follow {previous}"),
+                    ));
                 }
                 counts.push((code, cursor.leb128()?));
             }

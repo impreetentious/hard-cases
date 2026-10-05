@@ -193,10 +193,10 @@ fn whatever_has_been_fetched_is_run_and_what_is_missing_is_named() {
         }
         // The development half is where a cut family may be looked at, so it
         // is where the cuts are made to answer for themselves.
-        if dev.contains(&name) {
-            if let Some(finding) = cuts_agree(&name, &raw, nodes) {
-                findings.push(finding);
-            }
+        if dev.contains(&name)
+            && let Some(finding) = cuts_agree(&name, &raw, nodes)
+        {
+            findings.push(finding);
         }
         ran.push(row);
     }

@@ -495,15 +495,15 @@ pub fn is_feasible(model: &Model, point: &[f64], fence: f64) -> bool {
     }
     for (index, variable) in model.variables().iter().enumerate() {
         let value = point[index];
-        if let Some(low) = &variable.lower {
-            if value < low.to_binary64() - fence {
-                return false;
-            }
+        if let Some(low) = &variable.lower
+            && value < low.to_binary64() - fence
+        {
+            return false;
         }
-        if let Some(high) = &variable.upper {
-            if value > high.to_binary64() + fence {
-                return false;
-            }
+        if let Some(high) = &variable.upper
+            && value > high.to_binary64() + fence
+        {
+            return false;
         }
     }
     let by_row = model.matrix().by_row(model.rows().len());
@@ -512,15 +512,15 @@ pub fn is_feasible(model: &Model, point: &[f64], fence: f64) -> bool {
         for (variable, value) in by_row.row(RowId(index as u32)) {
             activity += value.to_binary64() * point[variable.index()];
         }
-        if let Some(low) = &row.lower {
-            if activity < low.to_binary64() - fence {
-                return false;
-            }
+        if let Some(low) = &row.lower
+            && activity < low.to_binary64() - fence
+        {
+            return false;
         }
-        if let Some(high) = &row.upper {
-            if activity > high.to_binary64() + fence {
-                return false;
-            }
+        if let Some(high) = &row.upper
+            && activity > high.to_binary64() + fence
+        {
+            return false;
         }
     }
     true

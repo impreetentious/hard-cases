@@ -206,13 +206,14 @@ pub fn run_one(name: &str, raw: &[u8], expected: Option<Expected>) -> Row {
         }
     }
 
-    if let Some(expected) = expected {
-        if finding.is_none() && solver_name != expected.as_str() {
-            finding = Some(format!(
-                "the manifest expects {}, and both solvers said {solver_name}",
-                expected.as_str()
-            ));
-        }
+    if let Some(expected) = expected
+        && finding.is_none()
+        && solver_name != expected.as_str()
+    {
+        finding = Some(format!(
+            "the manifest expects {}, and both solvers said {solver_name}",
+            expected.as_str()
+        ));
     }
 
     Row {

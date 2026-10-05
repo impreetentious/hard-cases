@@ -142,13 +142,12 @@ fn every_entry_reaches_its_status_and_certifies() {
         }
         if let (Some(stated), Some(attained)) =
             (entry.objective.as_deref(), row.objective.as_deref())
+            && stated != attained
         {
-            if stated != attained {
-                findings.push(format!(
-                    "{}: the manifest records {stated} and the search attained {attained}",
-                    entry.table
-                ));
-            }
+            findings.push(format!(
+                "{}: the manifest records {stated} and the search attained {attained}",
+                entry.table
+            ));
         }
     }
     assert!(findings.is_empty(), "{}", findings.join("\n"));

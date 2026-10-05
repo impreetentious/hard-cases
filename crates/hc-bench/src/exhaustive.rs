@@ -194,15 +194,15 @@ fn boxes_of(model: &Model, cap: u64) -> Result<Option<Vec<(i64, i64)>>, &'static
 fn feasible(model: &Model, point: &[Rational]) -> bool {
     for (index, row) in model.rows().iter().enumerate() {
         let activity = model.row_activity(hc_core::RowId(index as u32), point);
-        if let Some(low) = &row.lower {
-            if activity.cmp_value(low).is_lt() {
-                return false;
-            }
+        if let Some(low) = &row.lower
+            && activity.cmp_value(low).is_lt()
+        {
+            return false;
         }
-        if let Some(high) = &row.upper {
-            if activity.cmp_value(high).is_gt() {
-                return false;
-            }
+        if let Some(high) = &row.upper
+            && activity.cmp_value(high).is_gt()
+        {
+            return false;
         }
     }
     true

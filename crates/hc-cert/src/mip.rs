@@ -693,10 +693,10 @@ fn node_bounds<'a>(
             Some(entry) => entry,
             None => break,
         };
-        if let Some(assumption) = &entry.assumption {
-            if let Some(Some(id)) = ids.get(usize::try_from(current).unwrap_or(usize::MAX)) {
-                chain.push((*id, assumption));
-            }
+        if let Some(assumption) = &entry.assumption
+            && let Some(Some(id)) = ids.get(usize::try_from(current).unwrap_or(usize::MAX))
+        {
+            chain.push((*id, assumption));
         }
         at = entry.parent;
     }

@@ -105,13 +105,13 @@ pub fn of(run: &Run<'_>) -> Trace {
     // that solve, so this is the search's order and not a presentation of it.
     let mut written: Vec<bool> = vec![false; run.search.nodes.len()];
     for (at, record) in run.search.spent.iter().enumerate() {
-        if at == 0 {
-            if let Some(objective) = record.objective {
-                trace.push(Event::RootLp {
-                    iterations: record.iterations,
-                    objective,
-                });
-            }
+        if at == 0
+            && let Some(objective) = record.objective
+        {
+            trace.push(Event::RootLp {
+                iterations: record.iterations,
+                objective,
+            });
         }
         push_node(&mut trace, run.search, record.node);
         push_solved(&mut trace, record);
@@ -171,10 +171,10 @@ pub fn of(run: &Run<'_>) -> Trace {
             _ => {}
         }
     }
-    if let Some(certificate) = run.certificate {
-        if let Some(event) = complete(certificate) {
-            trace.push(event);
-        }
+    if let Some(certificate) = run.certificate
+        && let Some(event) = complete(certificate)
+    {
+        trace.push(event);
     }
 
     if let Some(proof) = run.proof {
@@ -336,14 +336,12 @@ fn complete(certificate: &Certificate) -> Option<Event> {
             gap.clone_from(difference);
         }
     }
-    if optimal {
-        if let Some(objective) = upper.clone() {
-            return Some(Event::CertifyComplete {
-                lower: objective.to_canonical_string(),
-                upper: objective.to_canonical_string(),
-                gap: "0".to_owned(),
-            });
-        }
+    if optimal && let Some(objective) = upper.clone() {
+        return Some(Event::CertifyComplete {
+            lower: objective.to_canonical_string(),
+            upper: objective.to_canonical_string(),
+            gap: "0".to_owned(),
+        });
     }
     match (lower, upper, gap) {
         (Some(lower), Some(upper), Some(gap)) => Some(Event::CertifyComplete {
