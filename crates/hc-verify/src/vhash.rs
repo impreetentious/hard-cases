@@ -251,10 +251,7 @@ pub fn to_hex(bytes: &[u8]) -> String {
 /// Reads lowercase hexadecimal into bytes, or `None` if it is not that.
 #[must_use]
 pub fn from_hex(text: &str) -> Option<Vec<u8>> {
-    if !{
-        let __multiple_value = text.len();
-        __multiple_value % 2 == 0
-    } {
+    if !text.len().is_multiple_of(2) {
         return None;
     }
     let mut out = Vec::with_capacity(text.len() / 2);

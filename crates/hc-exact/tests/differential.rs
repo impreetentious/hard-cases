@@ -100,10 +100,7 @@ fn magnitude_round(generator: &mut Xoshiro256PlusPlus) {
     );
     assert_eq!(
         big_left.is_even(),
-        {
-            let __multiple_value = left;
-            __multiple_value % 2 == 0
-        },
+        left.is_multiple_of(2),
         "parity of {left}"
     );
     if left != 0 {

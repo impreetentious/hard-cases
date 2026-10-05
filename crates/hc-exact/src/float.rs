@@ -316,25 +316,9 @@ mod tests {
         assert!(max.rounds_to_nonzero_finite_binary64());
         // The midpoint between the largest finite value and the next power of
         // two is a tie, and the even neighbour is the infinity.
-        let ulp = Rational::from_binary64(f64::MAX).expect("finite").sub(
-            &Rational::from_binary64({
-                let __binary64_neighbor_value: f64 = f64::MAX;
-                if __binary64_neighbor_value.is_nan()
-                    || __binary64_neighbor_value == f64::NEG_INFINITY
-                {
-                    __binary64_neighbor_value
-                } else if __binary64_neighbor_value == 0.0 {
-                    f64::from_bits((1u64 << 63) | 1)
-                } else {
-                    f64::from_bits(if __binary64_neighbor_value > 0.0 {
-                        __binary64_neighbor_value.to_bits() - 1
-                    } else {
-                        __binary64_neighbor_value.to_bits() + 1
-                    })
-                }
-            })
-            .expect("finite"),
-        );
+        let ulp = Rational::from_binary64(f64::MAX)
+            .expect("finite")
+            .sub(&Rational::from_binary64(f64::MAX.next_down()).expect("finite"));
         let midpoint = max.add(&ulp.mul(&ratio(1, 2)));
         assert!(midpoint.to_binary64().is_infinite());
         let below = max.add(&ulp.mul(&ratio(1, 4)));

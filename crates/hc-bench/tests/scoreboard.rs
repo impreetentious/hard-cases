@@ -28,10 +28,7 @@ fn grouped(value: usize) -> String {
     let digits = value.to_string();
     let mut out = String::new();
     for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && {
-            let __multiple_value = digits.len() - at;
-            __multiple_value % 3 == 0
-        } {
+        if at > 0 && (digits.len() - at).is_multiple_of(3) {
             out.push(',');
         }
         out.push(digit);
