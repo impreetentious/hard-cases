@@ -181,9 +181,7 @@ impl Working {
     #[must_use]
     pub fn with_costs(&self, costs: &[f64]) -> Self {
         let mut copy = self.clone();
-        for slot in &mut copy.cost {
-            *slot = 0.0;
-        }
+        copy.cost.fill(0.0);
         for (slot, value) in copy.cost.iter_mut().zip(costs) {
             *slot = *value;
         }

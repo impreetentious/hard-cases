@@ -516,16 +516,16 @@ fn compare(
             "the recomputed cut differs from the one the record states",
         ));
     }
-    if let Some(stated) = right {
-        if *stated != recomputed.right {
-            return Err(Rejected::new(
-                code,
-                format!(
-                    "the recomputed right-hand side is {} and the record states {stated}",
-                    recomputed.right
-                ),
-            ));
-        }
+    if let Some(stated) = right
+        && *stated != recomputed.right
+    {
+        return Err(Rejected::new(
+            code,
+            format!(
+                "the recomputed right-hand side is {} and the record states {stated}",
+                recomputed.right
+            ),
+        ));
     }
     Ok(())
 }
@@ -636,13 +636,13 @@ fn finish(nodes: &[NodeState], incumbent: Option<&Frac>) -> Result<Replay, Rejec
             Terminal::Infeasible => {}
             Terminal::Bound(value) | Terminal::Integral(value) => {
                 all_infeasible = false;
-                if let Some(best) = incumbent {
-                    if value.compare(best) == core::cmp::Ordering::Less {
-                        return Err(Rejected::new(
-                            Code::CLAIM_LEAF_BELOW,
-                            format!("node {id} closes at {value}, below the incumbent {best}"),
-                        ));
-                    }
+                if let Some(best) = incumbent
+                    && value.compare(best) == core::cmp::Ordering::Less
+                {
+                    return Err(Rejected::new(
+                        Code::CLAIM_LEAF_BELOW,
+                        format!("node {id} closes at {value}, below the incumbent {best}"),
+                    ));
                 }
                 weakest_closed = Some(match weakest_closed {
                     None => value.clone(),
@@ -659,13 +659,13 @@ fn finish(nodes: &[NodeState], incumbent: Option<&Frac>) -> Result<Replay, Rejec
                 // frontier. Encoding it as one would let a complete tree be
                 // presented as a partial result, or a zero gap be manufactured
                 // out of a node that was actually closed.
-                if let Some(best) = incumbent {
-                    if value.compare(best) != core::cmp::Ordering::Less {
-                        return Err(Rejected::new(
-                            Code::TREE_FRONTIER_CLOSED,
-                            format!("node {id} is open at {value}, which already meets {best}"),
-                        ));
-                    }
+                if let Some(best) = incumbent
+                    && value.compare(best) != core::cmp::Ordering::Less
+                {
+                    return Err(Rejected::new(
+                        Code::TREE_FRONTIER_CLOSED,
+                        format!("node {id} is open at {value}, which already meets {best}"),
+                    ));
                 }
                 frontier = Some(match frontier {
                     None => value.clone(),

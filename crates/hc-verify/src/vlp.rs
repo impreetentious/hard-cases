@@ -452,13 +452,13 @@ fn opens(shape: &str) -> Option<Result<(Part, Option<Direction>), Rejected>> {
     let head = shape.split(' ').next().unwrap_or("");
     let pair = shape.splitn(3, ' ').take(2).collect::<Vec<_>>().join(" ");
     for candidate in [head, pair.as_str()] {
-        if candidate.len() < shape.len() {
-            if let Some((part, _)) = keyword(candidate) {
-                return Some(Err(Rejected::new(
-                    Code::LP_GRAMMAR,
-                    format!("{} shares its line with other content", part.word()),
-                )));
-            }
+        if candidate.len() < shape.len()
+            && let Some((part, _)) = keyword(candidate)
+        {
+            return Some(Err(Rejected::new(
+                Code::LP_GRAMMAR,
+                format!("{} shares its line with other content", part.word()),
+            )));
         }
     }
     None

@@ -163,7 +163,7 @@ impl Digest {
     /// One block, with the schedule kept in a rolling window.
     fn round(&mut self, block: &[u8; 64]) {
         let mut window = [0u32; 16];
-        for (slot, chunk) in window.iter_mut().zip(block.chunks_exact(4)) {
+        for (slot, chunk) in window.iter_mut().zip(block.as_chunks::<4>().0.iter()) {
             *slot = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         }
 

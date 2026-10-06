@@ -391,13 +391,13 @@ pub fn read(certificate: &[u8], instance: &[u8]) -> Result<Proof, Rejected> {
         }
         let code = scan.byte()?;
         let id = scan.varint()?;
-        if let Some(last) = previous {
-            if id <= last {
-                return Err(Rejected::new(
-                    Code::PARSE_IDENTIFIER_ORDER,
-                    format!("record identifier {id} does not follow {last}"),
-                ));
-            }
+        if let Some(last) = previous
+            && id <= last
+        {
+            return Err(Rejected::new(
+                Code::PARSE_IDENTIFIER_ORDER,
+                format!("record identifier {id} does not follow {last}"),
+            ));
         }
         previous = Some(id);
 

@@ -46,7 +46,7 @@ Nothing on it is a mock.
 <!-- counters:begin -->
 | measured | |
 |---|---:|
-| verifier source, excluding its own tests | 8426 lines in 23 files |
+| verifier source, excluding its own tests | 8423 lines in 23 files |
 | dependencies the verifier declares | 0 |
 | uses of unsafe inside the verifier | 0 |
 | committed instances a gate consumes | 12 |
@@ -173,4 +173,4 @@ infrastructure, and embedding is the point.
 
 ---
 
-**Version:** v0.13.8
+**Version:** v0.13.9

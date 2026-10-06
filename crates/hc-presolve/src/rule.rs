@@ -233,10 +233,10 @@ pub fn empty_column_value(variable: &Variable) -> Option<Rational> {
     // this rule declines, the column stays, and the relaxation reports what it
     // is. Reaching for an endpoint here is how a reduction produces an answer
     // to a question nobody can answer.
-    if let (Some(low), Some(high)) = (low.as_ref(), high.as_ref()) {
-        if low.cmp_value(high).is_gt() {
-            return None;
-        }
+    if let (Some(low), Some(high)) = (low.as_ref(), high.as_ref())
+        && low.cmp_value(high).is_gt()
+    {
+        return None;
     }
     let zero = Rational::zero();
     let inside = low
@@ -344,10 +344,10 @@ fn singleton_row(draft: &mut Draft, row: usize, column: usize) -> Result<(), Ina
     if let Some(value) = &high {
         variable.upper = Some(tighter_upper(variable.upper.as_ref(), value));
     }
-    if let (Some(l), Some(u)) = (&variable.lower, &variable.upper) {
-        if l.cmp_value(u).is_gt() {
-            return Err(Inapplicable::Contradiction);
-        }
+    if let (Some(l), Some(u)) = (&variable.lower, &variable.upper)
+        && l.cmp_value(u).is_gt()
+    {
+        return Err(Inapplicable::Contradiction);
     }
 
     draft.drop_row(row);
@@ -601,10 +601,10 @@ fn tighten_bound(
     } else {
         variable.lower = Some(derived);
     }
-    if let (Some(l), Some(u)) = (&variable.lower, &variable.upper) {
-        if l.cmp_value(u).is_gt() {
-            return Err(Inapplicable::Contradiction);
-        }
+    if let (Some(l), Some(u)) = (&variable.lower, &variable.upper)
+        && l.cmp_value(u).is_gt()
+    {
+        return Err(Inapplicable::Contradiction);
     }
     Ok(())
 }

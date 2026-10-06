@@ -326,10 +326,10 @@ pub fn empty_value(column: &Column) -> Option<Frac> {
     // A column whose bounds cross has no value to rest at. Choosing the nearer
     // endpoint would accept a reduction that puts a point outside its own
     // bounds, which is a rule this side must refuse whoever wrote it.
-    if let (Some(low), Some(high)) = (low.as_ref(), high.as_ref()) {
-        if low.compare(high) == core::cmp::Ordering::Greater {
-            return None;
-        }
+    if let (Some(low), Some(high)) = (low.as_ref(), high.as_ref())
+        && low.compare(high) == core::cmp::Ordering::Greater
+    {
+        return None;
     }
     let zero = Frac::zero();
     let inside = low
@@ -525,13 +525,13 @@ fn singleton(instance: &mut Instance, row: usize, column: usize) -> Result<(), R
             _ => value,
         });
     }
-    if let (Some(low), Some(high)) = (&holder.low, &holder.high) {
-        if low.compare(high) == core::cmp::Ordering::Greater {
-            return Err(Rejected::new(
-                Code::TRANSFORM_CONTRADICTION,
-                format!("column {column} has an empty domain after row {row}"),
-            ));
-        }
+    if let (Some(low), Some(high)) = (&holder.low, &holder.high)
+        && low.compare(high) == core::cmp::Ordering::Greater
+    {
+        return Err(Rejected::new(
+            Code::TRANSFORM_CONTRADICTION,
+            format!("column {column} has an empty domain after row {row}"),
+        ));
     }
     drop_row(instance, row as u32);
     Ok(())
@@ -717,13 +717,13 @@ fn tighten(
     } else {
         holder.low = Some(derived);
     }
-    if let (Some(low), Some(high)) = (&holder.low, &holder.high) {
-        if low.compare(high) == core::cmp::Ordering::Greater {
-            return Err(Rejected::new(
-                Code::TRANSFORM_CONTRADICTION,
-                format!("column {column} has an empty domain after row {row}"),
-            ));
-        }
+    if let (Some(low), Some(high)) = (&holder.low, &holder.high)
+        && low.compare(high) == core::cmp::Ordering::Greater
+    {
+        return Err(Rejected::new(
+            Code::TRANSFORM_CONTRADICTION,
+            format!("column {column} has an empty domain after row {row}"),
+        ));
     }
     Ok(())
 }

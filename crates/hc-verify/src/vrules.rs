@@ -221,52 +221,52 @@ pub fn point_is_feasible(
         let activity = instance
             .activity_at(index as u32, point)
             .ok_or_else(|| Rejected::new(Code::POINT_DIMENSION, "the point is the wrong length"))?;
-        if let Some(low) = &row.low {
-            if work.compare(&activity, low) == core::cmp::Ordering::Less {
-                return Err(Rejected::new(
-                    Code::POINT_ROW,
-                    format!(
-                        "row {} has activity {activity} below its lower side {low}",
-                        row.name
-                    ),
-                ));
-            }
+        if let Some(low) = &row.low
+            && work.compare(&activity, low) == core::cmp::Ordering::Less
+        {
+            return Err(Rejected::new(
+                Code::POINT_ROW,
+                format!(
+                    "row {} has activity {activity} below its lower side {low}",
+                    row.name
+                ),
+            ));
         }
-        if let Some(high) = &row.high {
-            if work.compare(&activity, high) == core::cmp::Ordering::Greater {
-                return Err(Rejected::new(
-                    Code::POINT_ROW,
-                    format!(
-                        "row {} has activity {activity} above its upper side {high}",
-                        row.name
-                    ),
-                ));
-            }
+        if let Some(high) = &row.high
+            && work.compare(&activity, high) == core::cmp::Ordering::Greater
+        {
+            return Err(Rejected::new(
+                Code::POINT_ROW,
+                format!(
+                    "row {} has activity {activity} above its upper side {high}",
+                    row.name
+                ),
+            ));
         }
     }
 
     for (column, value) in instance.columns.iter().zip(point) {
-        if let Some(low) = &column.low {
-            if work.compare(value, low) == core::cmp::Ordering::Less {
-                return Err(Rejected::new(
-                    Code::POINT_BOUND,
-                    format!(
-                        "column {} holds {value} below its lower bound {low}",
-                        column.name
-                    ),
-                ));
-            }
+        if let Some(low) = &column.low
+            && work.compare(value, low) == core::cmp::Ordering::Less
+        {
+            return Err(Rejected::new(
+                Code::POINT_BOUND,
+                format!(
+                    "column {} holds {value} below its lower bound {low}",
+                    column.name
+                ),
+            ));
         }
-        if let Some(high) = &column.high {
-            if work.compare(value, high) == core::cmp::Ordering::Greater {
-                return Err(Rejected::new(
-                    Code::POINT_BOUND,
-                    format!(
-                        "column {} holds {value} above its upper bound {high}",
-                        column.name
-                    ),
-                ));
-            }
+        if let Some(high) = &column.high
+            && work.compare(value, high) == core::cmp::Ordering::Greater
+        {
+            return Err(Rejected::new(
+                Code::POINT_BOUND,
+                format!(
+                    "column {} holds {value} above its upper bound {high}",
+                    column.name
+                ),
+            ));
         }
     }
 
