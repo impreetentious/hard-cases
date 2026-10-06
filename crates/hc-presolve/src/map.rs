@@ -139,15 +139,15 @@ pub fn reverse(before: &Model, rule: &Rule, point: &[Rational]) -> Vec<Rational>
 /// A value pulled into an interval.
 fn clamp(value: &Rational, low: Option<&Rational>, high: Option<&Rational>) -> Rational {
     let mut out = value.clone();
-    if let Some(bound) = low {
-        if out.cmp_value(bound).is_lt() {
-            out = bound.clone();
-        }
+    if let Some(bound) = low
+        && out.cmp_value(bound).is_lt()
+    {
+        out = bound.clone();
     }
-    if let Some(bound) = high {
-        if out.cmp_value(bound).is_gt() {
-            out = bound.clone();
-        }
+    if let Some(bound) = high
+        && out.cmp_value(bound).is_gt()
+    {
+        out = bound.clone();
     }
     out
 }

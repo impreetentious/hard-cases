@@ -210,10 +210,10 @@ fn opening(shape: &str) -> Option<Opening> {
         }
     }
     for (word, part) in KEYWORDS {
-        if let Some(rest) = shape.strip_prefix(*word) {
-            if rest.starts_with(' ') {
-                return Some(Opening::Trailing(*part));
-            }
+        if let Some(rest) = shape.strip_prefix(*word)
+            && rest.starts_with(' ')
+        {
+            return Some(Opening::Trailing(*part));
         }
     }
     None
@@ -410,14 +410,14 @@ impl Builder {
             )
             .at(line));
         }
-        if let Some(highest) = self.highest {
-            if place < highest {
-                return Err(Refusal::new(
-                    Rejection::INSTANCE_SECTION_ORDER,
-                    format!("{} appears out of order", part.word()),
-                )
-                .at(line));
-            }
+        if let Some(highest) = self.highest
+            && place < highest
+        {
+            return Err(Refusal::new(
+                Rejection::INSTANCE_SECTION_ORDER,
+                format!("{} appears out of order", part.word()),
+            )
+            .at(line));
         }
         self.seen[place] = true;
         self.highest = Some(place);
@@ -676,19 +676,19 @@ impl Builder {
 
     /// Reads a bound endpoint, which may be an absence.
     fn endpoint(&self, tokens: &[Token<'_>], line: usize) -> Result<Endpoint, Refusal> {
-        if let [Token::Sign(sign), Token::Name(word)] = tokens {
-            if token::is_infinity(word) {
-                return Ok(Endpoint::Infinite(*sign));
-            }
+        if let [Token::Sign(sign), Token::Name(word)] = tokens
+            && token::is_infinity(word)
+        {
+            return Ok(Endpoint::Infinite(*sign));
         }
-        if let [Token::Name(word)] = tokens {
-            if token::is_infinity(word) {
-                return Err(Refusal::new(
-                    Rejection::INSTANCE_LP_GRAMMAR,
-                    "an infinite bound carries the sign of the side it names".to_owned(),
-                )
-                .at(line));
-            }
+        if let [Token::Name(word)] = tokens
+            && token::is_infinity(word)
+        {
+            return Err(Refusal::new(
+                Rejection::INSTANCE_LP_GRAMMAR,
+                "an infinite bound carries the sign of the side it names".to_owned(),
+            )
+            .at(line));
         }
         self.number(tokens, line).map(Endpoint::Finite)
     }
@@ -698,12 +698,12 @@ impl Builder {
         let grammar =
             |detail: String| Refusal::new(Rejection::INSTANCE_LP_GRAMMAR, detail).at(line);
 
-        if let [Token::Name(name), Token::Name(word)] = tokens {
-            if token::is_free(word) {
-                let column = self.known(name, line)?;
-                self.apply_lower(column, Endpoint::Infinite(false), line)?;
-                return self.apply_upper(column, Endpoint::Infinite(true), line);
-            }
+        if let [Token::Name(name), Token::Name(word)] = tokens
+            && token::is_free(word)
+        {
+            let column = self.known(name, line)?;
+            self.apply_lower(column, Endpoint::Infinite(false), line)?;
+            return self.apply_upper(column, Endpoint::Infinite(true), line);
         }
 
         let relations: Vec<usize> = tokens

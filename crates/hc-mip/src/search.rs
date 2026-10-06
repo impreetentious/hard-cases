@@ -506,10 +506,10 @@ impl Walk {
     /// whose parent bound is most promising, with the lowest identifier
     /// breaking ties.
     fn pick(&mut self) -> Option<u64> {
-        if let Some(diving) = self.diving {
-            if self.open.contains(&diving) {
-                return Some(diving);
-            }
+        if let Some(diving) = self.diving
+            && self.open.contains(&diving)
+        {
+            return Some(diving);
         }
         self.diving = None;
 
@@ -776,12 +776,13 @@ impl Walk {
                 // heuristics on the same terms as any other — they propose,
                 // the exact screening disposes, and a refusal costs the claim
                 // rather than corrupting it.
-                if options.heuristics && self.incumbent.is_none() {
-                    if let Ok(point) = exact_point(&canonical, basis, &|column| {
+                if options.heuristics
+                    && self.incumbent.is_none()
+                    && let Ok(point) = exact_point(&canonical, basis, &|column| {
                         resting_value(&canonical, basis, column)
-                    }) {
-                        self.guess(&canonical, &narrowed, &point, id, options);
-                    }
+                    })
+                {
+                    self.guess(&canonical, &narrowed, &point, id, options);
                 }
                 unproved(&"the relaxation is unbounded")
             }
@@ -790,20 +791,17 @@ impl Walk {
                 // A child's region is inside its parent's, so its bound cannot
                 // be weaker. A bound that regressed is reported and the node
                 // stays open; it is never used to close anything.
-                if let Some(value) = bound_of(&result) {
-                    if let Some(parent) = parent {
-                        if let Some(Some(before)) = self
-                            .bounds
-                            .get(usize::try_from(parent).unwrap_or(usize::MAX))
-                        {
-                            if value.cmp_value(before).is_lt() {
-                                return Node::Suspect {
-                                    value: value.clone(),
-                                    parent: before.clone(),
-                                };
-                            }
-                        }
-                    }
+                if let Some(value) = bound_of(&result)
+                    && let Some(parent) = parent
+                    && let Some(Some(before)) = self
+                        .bounds
+                        .get(usize::try_from(parent).unwrap_or(usize::MAX))
+                    && value.cmp_value(before).is_lt()
+                {
+                    return Node::Suspect {
+                        value: value.clone(),
+                        parent: before.clone(),
+                    };
                 }
                 let slot = usize::try_from(id).expect("a node identifier fits");
                 while self.bounds.len() <= slot.max(self.tree.len().saturating_sub(1)) {
@@ -854,13 +852,13 @@ impl Walk {
 
         let value = canonical.objective_at(&point);
 
-        if let Some(best) = self.incumbent.as_ref() {
-            if value.cmp_value(&best.objective).is_ge() {
-                return Node::Bound {
-                    basis: basis.clone(),
-                    value,
-                };
-            }
+        if let Some(best) = self.incumbent.as_ref()
+            && value.cmp_value(&best.objective).is_ge()
+        {
+            return Node::Bound {
+                basis: basis.clone(),
+                value,
+            };
         }
 
         let list = candidates(canonical, &point);

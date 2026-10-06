@@ -123,10 +123,10 @@ pub fn reduce(model: &Model) -> Chain {
 
     'fixpoint: loop {
         for rule in candidates(&current) {
-            if let Rule::TightenBound { column, upper, .. } = &rule {
-                if spent.get(&(*column, *upper)).copied().unwrap_or(0) >= TIGHTENINGS_PER_SIDE {
-                    continue;
-                }
+            if let Rule::TightenBound { column, upper, .. } = &rule
+                && spent.get(&(*column, *upper)).copied().unwrap_or(0) >= TIGHTENINGS_PER_SIDE
+            {
+                continue;
             }
             match apply(&current, &rule) {
                 Ok(next) => {
@@ -170,18 +170,18 @@ fn candidates(model: &Model) -> Vec<Rule> {
 
     // T1
     for (column, variable) in draft.variables.iter().enumerate() {
-        if let (Some(low), Some(high)) = variable.effective_bounds() {
-            if low == high {
-                out.push(Rule::FixedColumn { column, value: low });
-            }
+        if let (Some(low), Some(high)) = variable.effective_bounds()
+            && low == high
+        {
+            out.push(Rule::FixedColumn { column, value: low });
         }
     }
     // T2
     for (column, variable) in draft.variables.iter().enumerate() {
-        if draft.column_entries(column).is_empty() {
-            if let Some(value) = empty_column_value(variable) {
-                out.push(Rule::EmptyColumn { column, value });
-            }
+        if draft.column_entries(column).is_empty()
+            && let Some(value) = empty_column_value(variable)
+        {
+            out.push(Rule::EmptyColumn { column, value });
         }
     }
     // T3

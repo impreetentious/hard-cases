@@ -33,13 +33,13 @@ pub fn write(model: &Model) -> Result<String, Unwritable> {
                 row.name
             )));
         }
-        if let (Some(low), Some(high)) = (row.lower.as_ref(), row.upper.as_ref()) {
-            if low > high {
-                return Err(Unwritable::new(format!(
-                    "row {:?} has sides that cross, which no range in this schema produces",
-                    row.name
-                )));
-            }
+        if let (Some(low), Some(high)) = (row.lower.as_ref(), row.upper.as_ref())
+            && low > high
+        {
+            return Err(Unwritable::new(format!(
+                "row {:?} has sides that cross, which no range in this schema produces",
+                row.name
+            )));
         }
     }
 

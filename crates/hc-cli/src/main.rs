@@ -51,11 +51,11 @@ fn main() -> ExitCode {
                 };
                 let explained = run::explain(&instance, &bytes, &asked);
                 print!("{}", explained.report);
-                if let (Some(destination), Some(written)) = (trace, explained.trace) {
-                    if let Err(error) = std::fs::write(&destination, &written) {
-                        eprintln!("hc: cannot write {destination}: {error}");
-                        return code(Ending::Refused);
-                    }
+                if let (Some(destination), Some(written)) = (trace, explained.trace)
+                    && let Err(error) = std::fs::write(&destination, &written)
+                {
+                    eprintln!("hc: cannot write {destination}: {error}");
+                    return code(Ending::Refused);
                 }
                 code(explained.ending)
             }
@@ -130,13 +130,12 @@ fn main() -> ExitCode {
             let destination = certificate.unwrap_or_else(|| String::from("(not written)"));
             let (out, proof, ending) = run::certify(&instance, &bytes, &destination, &solved);
             print!("{out}");
-            if let Some(proof) = proof {
-                if destination != "(not written)" {
-                    if let Err(error) = std::fs::write(&destination, &proof) {
-                        eprintln!("hc: cannot write {destination}: {error}");
-                        return code(Ending::Refused);
-                    }
-                }
+            if let Some(proof) = proof
+                && destination != "(not written)"
+                && let Err(error) = std::fs::write(&destination, &proof)
+            {
+                eprintln!("hc: cannot write {destination}: {error}");
+                return code(Ending::Refused);
             }
             code(ending)
         }

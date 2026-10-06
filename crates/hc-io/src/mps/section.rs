@@ -142,14 +142,14 @@ impl Sequence {
             )
             .at(line));
         }
-        if let Some(highest) = self.highest {
-            if section.rank() < highest {
-                return Err(Refusal::new(
-                    Rejection::INSTANCE_SECTION_ORDER,
-                    format!("section {} appears out of order", section.as_str()),
-                )
-                .at(line));
-            }
+        if let Some(highest) = self.highest
+            && section.rank() < highest
+        {
+            return Err(Refusal::new(
+                Rejection::INSTANCE_SECTION_ORDER,
+                format!("section {} appears out of order", section.as_str()),
+            )
+            .at(line));
         }
         self.highest = Some(section.rank().max(self.highest.unwrap_or(0)));
         self.seen.push(section);
