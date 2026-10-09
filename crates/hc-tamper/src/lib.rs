@@ -389,14 +389,12 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
                 if let Record::Incumbent {
                     reduced, original, ..
                 } = record
+                    && let (Some(first), Some(second)) = (reduced.first_mut(), original.first_mut())
                 {
-                    if let (Some(first), Some(second)) = (reduced.first_mut(), original.first_mut())
-                    {
-                        let moved = first.add(&Rational::from_i64(1_000));
-                        *first = moved.clone();
-                        *second = moved;
-                        touched = true;
-                    }
+                    let moved = first.add(&Rational::from_i64(1_000));
+                    *first = moved.clone();
+                    *second = moved;
+                    touched = true;
                 }
             }
             if !touched {
@@ -455,11 +453,11 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         "unknown_transform_rule" => {
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::Transform { rule, .. } = record {
-                    if !touched {
-                        *rule = 9;
-                        touched = true;
-                    }
+                if let Record::Transform { rule, .. } = record
+                    && !touched
+                {
+                    *rule = 9;
+                    touched = true;
                 }
             }
             if !touched {
@@ -471,13 +469,12 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
             // real, the model is real, and the condition does not hold there.
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::Transform { parameters, .. } = record {
-                    if !touched {
-                        if let Some(first) = parameters.first_mut() {
-                            *first = first.add(&Rational::from_i64(1));
-                            touched = true;
-                        }
-                    }
+                if let Record::Transform { parameters, .. } = record
+                    && !touched
+                    && let Some(first) = parameters.first_mut()
+                {
+                    *first = first.add(&Rational::from_i64(1));
+                    touched = true;
                 }
             }
             if !touched {
@@ -490,13 +487,13 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
             // the model implies.
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::Transform { parameters, .. } = record {
-                    if !touched && parameters.len() >= 2 {
-                        if let Some(last) = parameters.last_mut() {
-                            *last = last.add(&Rational::from_i64(1));
-                            touched = true;
-                        }
-                    }
+                if let Record::Transform { parameters, .. } = record
+                    && !touched
+                    && parameters.len() >= 2
+                    && let Some(last) = parameters.last_mut()
+                {
+                    *last = last.add(&Rational::from_i64(1));
+                    touched = true;
                 }
             }
             if !touched {
@@ -506,11 +503,11 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         "forged_stage_hash" => {
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::Transform { result, .. } = record {
-                    if !touched {
-                        result[0] ^= 0xff;
-                        touched = true;
-                    }
+                if let Record::Transform { result, .. } = record
+                    && !touched
+                {
+                    result[0] ^= 0xff;
+                    touched = true;
                 }
             }
             if !touched {
@@ -534,13 +531,12 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
             // feasible in their own models; they no longer correspond.
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::Incumbent { original, .. } = record {
-                    if !touched {
-                        if let Some(pair) = distinct_pair(original) {
-                            original.swap(pair.0, pair.1);
-                            touched = true;
-                        }
-                    }
+                if let Record::Incumbent { original, .. } = record
+                    && !touched
+                    && let Some(pair) = distinct_pair(original)
+                {
+                    original.swap(pair.0, pair.1);
+                    touched = true;
                 }
             }
             if !touched {
@@ -550,13 +546,12 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         "forged_gomory_coefficient" => {
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::GmiCut { coefficients, .. } = record {
-                    if !touched {
-                        if let Some((_, value)) = coefficients.first_mut() {
-                            *value = value.add(&Rational::one());
-                            touched = true;
-                        }
-                    }
+                if let Record::GmiCut { coefficients, .. } = record
+                    && !touched
+                    && let Some((_, value)) = coefficients.first_mut()
+                {
+                    *value = value.add(&Rational::one());
+                    touched = true;
                 }
             }
             if !touched {
@@ -566,13 +561,12 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         "forged_cover_lift" => {
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::CoverCut { coefficients, .. } = record {
-                    if !touched {
-                        if let Some((_, value)) = coefficients.first_mut() {
-                            *value = value.add(&Rational::one());
-                            touched = true;
-                        }
-                    }
+                if let Record::CoverCut { coefficients, .. } = record
+                    && !touched
+                    && let Some((_, value)) = coefficients.first_mut()
+                {
+                    *value = value.add(&Rational::one());
+                    touched = true;
                 }
             }
             if !touched {
@@ -635,11 +629,11 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         "fractional_split" => {
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::Branch { split, .. } = record {
-                    if !touched {
-                        *split = split.add(&half());
-                        touched = true;
-                    }
+                if let Record::Branch { split, .. } = record
+                    && !touched
+                {
+                    *split = split.add(&half());
+                    touched = true;
                 }
             }
             if !touched {
@@ -661,13 +655,12 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
             }
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::LeafBound { node, .. } | Record::LeafFrontier { node, .. } = record {
-                    if !touched {
-                        if let Some(other) = nodes.iter().find(|candidate| *candidate != node) {
-                            *node = *other;
-                            touched = true;
-                        }
-                    }
+                if let Record::LeafBound { node, .. } | Record::LeafFrontier { node, .. } = record
+                    && !touched
+                    && let Some(other) = nodes.iter().find(|candidate| *candidate != node)
+                {
+                    *node = *other;
+                    touched = true;
                 }
             }
             if !touched {
@@ -677,13 +670,12 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
         "moved_integral_point" => {
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::LeafIntegral { point, .. } = record {
-                    if !touched {
-                        if let Some(first) = point.first_mut() {
-                            *first = first.add(&Rational::from_i64(1_000));
-                            touched = true;
-                        }
-                    }
+                if let Record::LeafIntegral { point, .. } = record
+                    && !touched
+                    && let Some(first) = point.first_mut()
+                {
+                    *first = first.add(&Rational::from_i64(1_000));
+                    touched = true;
                 }
             }
             if !touched {
@@ -695,14 +687,14 @@ fn edit(name: &str, mut certificate: Certificate) -> Result<Certificate, NotAppl
             // complete proof of optimality into a manufactured gap.
             let mut touched = false;
             for record in records.iter_mut() {
-                if let Record::LeafBound { node, bound } = record {
-                    if !touched {
-                        *record = Record::LeafFrontier {
-                            node: *node,
-                            bound: *bound,
-                        };
-                        touched = true;
-                    }
+                if let Record::LeafBound { node, bound } = record
+                    && !touched
+                {
+                    *record = Record::LeafFrontier {
+                        node: *node,
+                        bound: *bound,
+                    };
+                    touched = true;
                 }
             }
             if !touched {
