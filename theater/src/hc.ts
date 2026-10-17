@@ -283,14 +283,15 @@ export class Solver {
   /** Rechecks a certificate and reports only what the verifier said. */
   recheck(proof: Uint8Array, instance: Uint8Array): Verdict {
     const one = this.give(proof);
-    const two = this.give(instance);
+    let two: { pointer: number; length: number } | null = null;
     try {
+      two = this.give(instance);
       return JSON.parse(
         readAnswer(this.api, this.api.hc_recheck(one.pointer, one.length, two.pointer, two.length)),
       ) as Verdict;
     } finally {
       this.take(one);
-      this.take(two);
+      if (two) this.take(two);
     }
   }
 
@@ -309,14 +310,15 @@ export class Solver {
   /** Reads a certificate the way the verifier reads it. */
   outline(proof: Uint8Array, instance: Uint8Array): Outline {
     const one = this.give(proof);
-    const two = this.give(instance);
+    let two: { pointer: number; length: number } | null = null;
     try {
+      two = this.give(instance);
       return JSON.parse(
         readAnswer(this.api, this.api.hc_outline(one.pointer, one.length, two.pointer, two.length)),
       ) as Outline;
     } finally {
       this.take(one);
-      this.take(two);
+      if (two) this.take(two);
     }
   }
 
@@ -357,7 +359,12 @@ export class Solver {
 
   private give(data: Uint8Array): { pointer: number; length: number } {
     const pointer = this.api.hc_reserve(data.length);
-    new Uint8Array(this.api.memory.buffer, pointer, data.length).set(data);
+    try {
+      new Uint8Array(this.api.memory.buffer, pointer, data.length).set(data);
+    } catch (error) {
+      this.api.hc_release(pointer, data.length);
+      throw error;
+    }
     return { pointer, length: data.length };
   }
 
@@ -368,10 +375,12 @@ export class Solver {
 
 /** Reads a length-prefixed answer out of the module and releases it. */
 function readAnswer(api: Exports, pointer: number): string {
-  const length = new DataView(api.memory.buffer).getUint32(pointer, true);
-  const text = decoder.decode(new Uint8Array(api.memory.buffer, pointer + 4, length));
-  api.hc_release_answer(pointer);
-  return text;
+  try {
+    const length = new DataView(api.memory.buffer).getUint32(pointer, true);
+    return decoder.decode(new Uint8Array(api.memory.buffer, pointer + 4, length));
+  } finally {
+    api.hc_release_answer(pointer);
+  }
 }
 
 /**

@@ -13,9 +13,9 @@
 // and exact. They are different types in the schema and different colours here
 // and nothing on the page converts one into the other.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { Glass as GlassReport, Outline, Report, TamperCase, Tampered } from "./hc";
+import type { Glass as GlassReport, Outline, Report, TamperCase, Tampered, Verdict } from "./hc";
 import { Solver, fromHex, resealed, toHex } from "./hc";
 import { viewAt } from "./state";
 import type { Cut } from "./state";
@@ -136,6 +136,55 @@ export default function App() {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [built, setBuilt] = useState<Built | null>(null);
   const [corpus, setCorpus] = useState<TamperCase[]>([]);
+
+  const importGeneration = useRef({ model: 0, proof: 0, alive: true });
+  const verifying = useRef(false);
+  const [importModel, setImportModel] = useState<{ bytes: Uint8Array; digest: string } | null>(null);
+  const [importProof, setImportProof] = useState<{ bytes: Uint8Array; digest: string } | null>(null);
+  const [importResult, setImportResult] = useState<{ verdict: Verdict; outline: Outline; model: string; proof: string } | null>(null);
+  const [importError, setImportError] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  useEffect(() => {
+    importGeneration.current.alive = true;
+    return () => { importGeneration.current.alive = false; };
+  }, []);
+  const readImport = async (side: "model" | "proof", file?: File) => {
+    const ticket = ++importGeneration.current[side];
+    setImportResult(null);
+    setImportError("");
+    if (side === "model") setImportModel(null); else setImportProof(null);
+    if (!file) return;
+    try {
+      const cap = (side === "model" ? 16 : 64) * 1024 * 1024;
+      if (file.size > cap) throw new Error(`${side} exceeds the ${side === "model" ? 16 : 64} MiB browser limit`);
+      const bytes = new Uint8Array(await file.arrayBuffer()).slice();
+      if (bytes.length > cap) throw new Error(`${side} exceeds the browser limit`);
+      const hash = await crypto.subtle.digest("SHA-256", bytes);
+      if (!importGeneration.current.alive || ticket !== importGeneration.current[side]) return;
+      const selected = { bytes, digest: toHex(new Uint8Array(hash)) };
+      if (side === "model") setImportModel(selected); else setImportProof(selected);
+    } catch (error) {
+      if (importGeneration.current.alive && ticket === importGeneration.current[side]) setImportError(String(error));
+    }
+  };
+  const verifyImport = () => {
+    if (!solver || !importModel || !importProof || verifying.current) return;
+    const generation = { ...importGeneration.current };
+    verifying.current = true;
+    setImportBusy(true);
+    setImportResult(null);
+    setImportError("");
+    requestAnimationFrame(() => {
+      const current = () => importGeneration.current.alive && generation.model === importGeneration.current.model && generation.proof === importGeneration.current.proof;
+      try {
+        if (!current()) return;
+        const verdict = solver.recheck(importProof.bytes, importModel.bytes);
+        const outline = solver.outline(importProof.bytes, importModel.bytes);
+        if (current()) setImportResult({ verdict, outline, model: importModel.digest, proof: importProof.digest });
+      } catch (error) { if (current()) setImportError(String(error)); }
+      finally { verifying.current = false; if (importGeneration.current.alive) setImportBusy(false); }
+    });
+  };
 
   const [own, setOwn] = useState<Own | null>(null);
   const [instance, setInstance] = useState<Uint8Array | null>(null);
@@ -554,6 +603,20 @@ export default function App() {
         </nav>
       </div>
 
+      <section className="controls" aria-label="Imported model and certificate verification">
+        <h2>Verify An Imported Pair</h2>
+        <label>Original model (16 MiB maximum)<input type="file" data-role="import-model" onChange={(event) => void readImport("model", event.target.files?.[0])} /></label>
+        <label>HCC certificate (64 MiB maximum)<input type="file" data-role="import-proof" onChange={(event) => void readImport("proof", event.target.files?.[0])} /></label>
+        <button type="button" data-role="import-verify" disabled={!solver || !importModel || !importProof || importBusy} onClick={verifyImport}>{importBusy ? "verifying…" : "Verify"}</button>
+        <p>Files stay local. Larger files: <code>hc-verify &lt;certificate&gt; --instance &lt;file&gt;</code></p>
+        {importError && <p role="alert">{importError}</p>}
+        {importResult && importResult.model === importModel?.digest && importResult.proof === importProof?.digest && <div data-role="import-result" role="status">
+          <p>Imported model/certificate · {importResult.verdict.accepted ? "independently verified" : (importResult.verdict.rejection ?? "refused")}</p>
+          {importResult.verdict.detail && <p>{importResult.verdict.detail}</p>}
+          <p>Model SHA-256: {importResult.model}<br />Certificate SHA-256: {importResult.proof}</p>
+          <Certificate outline={importResult.outline} hex={null} chosen={-1} onChoose={() => {}} columns={[]} />
+        </div>}
+      </section>
       <main
         className="stage"
         id="stage"

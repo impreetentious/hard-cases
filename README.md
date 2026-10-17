@@ -1,6 +1,6 @@
 # Hard Cases
 
-Hard Cases is a from-scratch linear and mixed-integer optimizer. The solver is
+Hard Cases is a linear and mixed-integer optimizer. The solver is
 the excuse; the certificate it emits with every claim, and the independent
 verifier that reads the original bytes and rechecks the proof, are the point.
 
@@ -62,7 +62,7 @@ The table above is written by `cargo run -p hc-bench --bin scoreboard`, which a
 test then regenerates and diffs. A number on a front page is a claim like any
 other, and these are the ones most likely to quietly stop being true.
 
-## Try the current workspace
+## Try The Workspace
 
 ```sh
 cargo run -p hc-cli -- solve instances/integer/knap9.mps --format mps-free --cert out.hcc
@@ -124,7 +124,7 @@ x86_64, macOS arm64, and WebAssembly; Windows is not a supported CI target. A
 false terminal claim is a severity-zero defect. See
 [the solver specification](docs/SOLVER-SPEC.md) before interpreting any result.
 
-## Going deeper
+## Going Deeper
 
 The write-ups are the point of the project — each one names a failure mode and
 shows the machinery that catches it, out of the code and the incidents in this
@@ -173,4 +173,4 @@ infrastructure, and embedding is the point.
 
 ---
 
-**Version:** v0.13.10
+**Version:** v0.13.11

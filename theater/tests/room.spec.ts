@@ -6,6 +6,8 @@
 // accepted; does a forged certificate come back refused by name. A screenshot
 // comparison would pass while every one of those was wrong.
 
+import { Solver, resealed } from "../src/hc";
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 /** Opens the room and waits for the module to load. */
@@ -237,4 +239,93 @@ test("a panel name this page does not have opens on the panel it starts on", asy
   await expect(page.locator('[data-panel="tree"]')).toHaveAttribute("aria-selected", "true");
   await expect(page.locator('[data-panel="cases"]')).toHaveAttribute("aria-selected", "false");
   await expect(page.locator("#stage")).toHaveAttribute("aria-labelledby", "tab-tree");
+});
+
+
+test("direct imports verify native bytes and clear evidence on replacement", async ({ page }) => {
+  await open(page);
+  const model = readFileSync(new URL("../public/instances/fixcharge6.mps", import.meta.url));
+  const proof = readFileSync(new URL("../public/recorded/run.hcc", import.meta.url));
+  const put = async (side: string, bytes: Buffer, name: string) => page.locator(`[data-role="import-${side}"]`).setInputFiles({name,mimeType:"application/octet-stream",buffer:bytes});
+  await put("model", model, "model.mps"); await put("proof", proof, "proof.hcc");
+  await expect(page.locator('[data-role="import-verify"]')).toBeEnabled();
+  await page.locator('[data-role="import-verify"]').click();
+  await expect(page.locator('[data-role="import-result"]')).toContainText("independently verified");
+  await expect(page.locator('[data-role="provenance"]')).toContainText("nothing solved yet");
+  await put("model", model, "renamed.mps");
+  await expect(page.locator('[data-role="import-result"]')).toHaveCount(0);
+  await page.locator('[data-role="import-verify"]').click();
+  await expect(page.locator('[data-role="import-result"]')).toContainText("independently verified");
+  const wrongModel = readFileSync(new URL("../public/instances/cover6.mps", import.meta.url));
+  await put("model", wrongModel, "renamed.mps");
+  await expect(page.locator('[data-role="import-result"]')).toHaveCount(0);
+  await page.locator('[data-role="import-verify"]').click();
+  await expect(page.locator('[data-role="import-result"]')).not.toContainText("independently verified");
+  await put("model", model, "model.mps");
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = function () {
+      if(this.name!=="late.mps")return original.call(this);
+      return new Promise<ArrayBuffer>((resolve)=>{(window as unknown as {releaseImportModel:()=>Promise<void>}).releaseImportModel=async()=>resolve(await original.call(this));});
+    };
+  });
+  await put("model",wrongModel,"late.mps");
+  await expect(page.locator('[data-role="import-verify"]')).toBeDisabled();
+  await put("model",model,"current.mps");
+  await expect(page.locator('[data-role="import-verify"]')).toBeEnabled();
+  await page.evaluate(()=>(window as unknown as {releaseImportModel:()=>Promise<void>}).releaseImportModel());
+  await page.locator('[data-role="import-verify"]').click();
+  await expect(page.locator('[data-role="import-result"]')).toContainText("independently verified");
+  const semantic = Buffer.from(proof); semantic[semantic.length-5] = (semantic[semantic.length-5] ?? 0) ^ 1;
+  await put("proof", Buffer.from(resealed(semantic)), "resealed.hcc");
+  await page.locator('[data-role="import-verify"]').click();
+  await expect(page.locator('[data-role="import-result"]')).not.toContainText("independently verified");
+  const corrupt = Buffer.from(proof); corrupt[corrupt.length-1] = (corrupt[corrupt.length-1] ?? 0) ^ 1;
+  await put("proof", corrupt, "proof.hcc");
+  await expect(page.locator('[data-role="import-result"]')).toHaveCount(0);
+  await expect(page.locator('[data-role="import-verify"]')).toBeEnabled();
+  await page.locator('[data-role="import-verify"]').click();
+  await expect(page.locator('[data-role="import-result"]')).not.toContainText("independently verified");
+  await put("proof", proof.subarray(0,8), "truncated.hcc");
+  await expect(page.locator('[data-role="import-verify"]')).toBeEnabled();
+  await page.locator('[data-role="import-verify"]').click();
+  await expect(page.locator('[data-role="import-result"]')).not.toContainText("independently verified");
+});
+
+
+test("verifier input allocations are released when the second reserve fails", () => {
+  const released: number[] = [];
+  let reserves = 0;
+  const api = {memory:new WebAssembly.Memory({initial:1}),hc_reserve:() => { if(++reserves===2)throw new Error("allocation refused"); return 16; },hc_release:(pointer:number) => released.push(pointer)};
+  const Factory = Solver as unknown as new (api: unknown, version: string, schema: number) => Solver;
+  const solver = new Factory(api,"test",1);
+  expect(()=>solver.recheck(new Uint8Array([1]),new Uint8Array([2]))).toThrow("allocation refused");
+  expect(released).toEqual([16]);
+});
+
+test("import byte caps are checked before reading and failed reads leave that side unselected", async ({ page }) => {
+  await open(page);
+  const select = async (side: string, oneOver: boolean, failed = false) => page.evaluate(({side,oneOver,failed}) => {
+    const file = new File([new Uint8Array([1,2,3,4])], "selected.bin");
+    Object.defineProperty(file, "size", {value:(side === "model" ? 16 : 64)*1024*1024+(oneOver?1:0)});
+    const state = window as unknown as {importReads?: number};
+    file.arrayBuffer = async () => {state.importReads=(state.importReads??0)+1;if(failed)throw new Error("fixture read failed");return new Uint8Array([1,2,3,4]).buffer;};
+    const input = document.querySelector<HTMLInputElement>(`[data-role="import-${side}"]`);
+    if(!input)throw new Error("import input missing");
+    Object.defineProperty(input,"files",{configurable:true,value:[file]});
+    input.dispatchEvent(new Event("change",{bubbles:true}));
+  },{side,oneOver,failed});
+  await select("model",false);await select("proof",false);
+  await expect(page.locator('[data-role="import-verify"]')).toBeEnabled();
+  for(const side of ["model","proof"]){
+    const reads=await page.evaluate(()=>(window as unknown as {importReads:number}).importReads);
+    await select(side,true);
+    await expect(page.getByRole("alert")).toContainText(`exceeds the ${side === "model" ? 16 : 64} MiB browser limit`);
+    expect(await page.evaluate(()=>(window as unknown as {importReads:number}).importReads)).toBe(reads);
+    await expect(page.locator('[data-role="import-verify"]')).toBeDisabled();
+    await select(side,false);await expect(page.locator('[data-role="import-verify"]')).toBeEnabled();
+  }
+  await select("model",false,true);
+  await expect(page.getByRole("alert")).toContainText("fixture read failed");
+  await expect(page.locator('[data-role="import-verify"]')).toBeDisabled();
 });
